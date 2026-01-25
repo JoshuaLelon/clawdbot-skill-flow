@@ -55,7 +55,7 @@ describe("renderStep - Telegram buttons", () => {
     expect(result.channelData?.telegram).toBeDefined();
     expect(result.channelData?.telegram?.buttons).toHaveLength(2);
     expect(result.channelData?.telegram?.buttons?.[0]).toEqual([
-      { text: "Option A", callback_data: "/flow-step test-flow step1:Option A" },
+      { text: "Option A", callback_data: "/flow_step test-flow step1:Option A" },
     ]);
   });
 
@@ -96,7 +96,7 @@ describe("renderStep - Telegram buttons", () => {
     expect(buttons?.[0]).toHaveLength(2); // 2 buttons per row
     expect(buttons?.[0]?.[0]).toEqual({
       text: "20",
-      callback_data: "/flow-step pushups set1:20",
+      callback_data: "/flow_step pushups set1:20",
     });
   });
 

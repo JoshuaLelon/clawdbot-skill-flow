@@ -1,5 +1,5 @@
 /**
- * /flow-step command - Handle flow step transitions (called via Telegram callbacks)
+ * /flow_step command - Handle flow step transitions (called via Telegram callbacks)
  */
 
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
@@ -92,7 +92,7 @@ export function createFlowStepCommand(api: ClawdbotPluginApi) {
       }
 
       return {
-        text: `Session expired or not found.\n\nUse /flow-start ${flowName} to restart the flow.`,
+        text: `Session expired or not found.\n\nUse /flow_start ${flowName} to restart the flow.`,
       };
     }
 

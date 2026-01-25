@@ -1,5 +1,5 @@
 /**
- * /flow-create command - Create a new flow
+ * /flow_create command - Create a new flow
  */
 
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
@@ -13,7 +13,7 @@ export function createFlowCreateCommand(api: ClawdbotPluginApi) {
 
     if (!input) {
       return {
-        text: "Usage: /flow-create import <json>\n\nExample:\n/flow-create import {...}",
+        text: "Usage: /flow_create import <json>\n\nExample:\n/flow_create import {...}",
       };
     }
 
@@ -22,7 +22,7 @@ export function createFlowCreateCommand(api: ClawdbotPluginApi) {
 
     if (!importMatch) {
       return {
-        text: "Currently only 'import' mode is supported.\n\nUsage: /flow-create import <json>",
+        text: "Currently only 'import' mode is supported.\n\nUsage: /flow_create import <json>",
       };
     }
 
@@ -46,7 +46,7 @@ export function createFlowCreateCommand(api: ClawdbotPluginApi) {
       api.logger.info(`Created flow "${flow.name}"`);
 
       return {
-        text: `✅ Flow "${flow.name}" created successfully!\n\nStart it with: /flow-start ${flow.name}`,
+        text: `✅ Flow "${flow.name}" created successfully!\n\nStart it with: /flow_start ${flow.name}`,
       };
     } catch (error) {
       if (error instanceof SyntaxError) {

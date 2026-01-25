@@ -1,5 +1,5 @@
 /**
- * /flow-delete command - Delete a flow
+ * /flow_delete command - Delete a flow
  */
 
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
@@ -11,7 +11,7 @@ export function createFlowDeleteCommand(api: ClawdbotPluginApi) {
 
     if (!flowName) {
       return {
-        text: "Usage: /flow-delete <flow-name>\n\nExample: /flow-delete pushups",
+        text: "Usage: /flow_delete <flow-name>\n\nExample: /flow_delete pushups",
       };
     }
 
@@ -20,7 +20,7 @@ export function createFlowDeleteCommand(api: ClawdbotPluginApi) {
 
     if (!flow) {
       return {
-        text: `Flow "${flowName}" not found.\n\nUse /flow-list to see available flows.`,
+        text: `Flow "${flowName}" not found.\n\nUse /flow_list to see available flows.`,
       };
     }
 

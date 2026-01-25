@@ -1,5 +1,5 @@
 /**
- * /flow-start command - Start a flow
+ * /flow_start command - Start a flow
  */
 
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
@@ -18,7 +18,7 @@ export function createFlowStartCommand(api: ClawdbotPluginApi) {
     // Validate input
     if (!flowName) {
       return {
-        text: "Usage: /flow-start <flow-name>\n\nExample: /flow-start pushups\n\nUse /flow-list to see available flows.",
+        text: "Usage: /flow_start <flow-name>\n\nExample: /flow_start pushups\n\nUse /flow_list to see available flows.",
       };
     }
 
@@ -27,7 +27,7 @@ export function createFlowStartCommand(api: ClawdbotPluginApi) {
 
     if (!flow) {
       return {
-        text: `Flow "${flowName}" not found.\n\nUse /flow-list to see available flows.`,
+        text: `Flow "${flowName}" not found.\n\nUse /flow_list to see available flows.`,
       };
     }
 

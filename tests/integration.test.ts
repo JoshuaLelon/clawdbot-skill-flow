@@ -67,7 +67,7 @@ describe("Integration: channelData format", () => {
     // Verify first button
     expect(buttons?.[0]?.[0]).toEqual({
       text: "20",
-      callback_data: "/flow-step pushups set1:20",
+      callback_data: "/flow_step pushups set1:20",
     });
 
     // Verify 2-column layout

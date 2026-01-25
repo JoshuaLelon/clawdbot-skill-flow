@@ -55,7 +55,7 @@ function renderTelegram(
     for (let i = 0; i < buttons.length; i += 2) {
       const row = buttons.slice(i, i + 2).map((btn) => ({
         text: btn.text,
-        callback_data: `/flow-step ${flowName} ${step.id}:${btn.value}`,
+        callback_data: `/flow_step ${flowName} ${step.id}:${btn.value}`,
       }));
       keyboard.push(row);
     }
@@ -64,7 +64,7 @@ function renderTelegram(
     keyboard = buttons.map((btn) => [
       {
         text: btn.text,
-        callback_data: `/flow-step ${flowName} ${step.id}:${btn.value}`,
+        callback_data: `/flow_step ${flowName} ${step.id}:${btn.value}`,
       },
     ]);
   }

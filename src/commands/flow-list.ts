@@ -1,5 +1,5 @@
 /**
- * /flow-list command - List all available flows
+ * /flow_list command - List all available flows
  */
 
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
@@ -11,7 +11,7 @@ export function createFlowListCommand(api: ClawdbotPluginApi) {
 
     if (flows.length === 0) {
       return {
-        text: "No flows found.\n\nCreate one with: /flow-create import {...}",
+        text: "No flows found.\n\nCreate one with: /flow_create import {...}",
       };
     }
 
@@ -25,7 +25,7 @@ export function createFlowListCommand(api: ClawdbotPluginApi) {
         message += `  🕒 Cron: ${flow.triggers.cron}\n`;
       }
 
-      message += `  Start: /flow-start ${flow.name}\n\n`;
+      message += `  Start: /flow_start ${flow.name}\n\n`;
     }
 
     return { text: message };

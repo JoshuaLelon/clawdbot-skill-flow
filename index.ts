@@ -29,9 +29,9 @@ const plugin = {
     // Initialize session store with config
     initSessionStore(config);
 
-    // Register commands
+    // Register commands (use underscores per Telegram requirements)
     api.registerCommand({
-      name: "flow-start",
+      name: "flow_start",
       description: "Start a workflow",
       acceptsArgs: true,
       requireAuth: true,
@@ -39,7 +39,7 @@ const plugin = {
     });
 
     api.registerCommand({
-      name: "flow-step",
+      name: "flow_step",
       description: "Handle flow step transition (internal)",
       acceptsArgs: true,
       requireAuth: true,
@@ -47,7 +47,7 @@ const plugin = {
     });
 
     api.registerCommand({
-      name: "flow-create",
+      name: "flow_create",
       description: "Create a new flow from JSON",
       acceptsArgs: true,
       requireAuth: true,
@@ -55,7 +55,7 @@ const plugin = {
     });
 
     api.registerCommand({
-      name: "flow-list",
+      name: "flow_list",
       description: "List all available flows",
       acceptsArgs: false,
       requireAuth: true,
@@ -63,7 +63,7 @@ const plugin = {
     });
 
     api.registerCommand({
-      name: "flow-delete",
+      name: "flow_delete",
       description: "Delete a flow",
       acceptsArgs: true,
       requireAuth: true,
