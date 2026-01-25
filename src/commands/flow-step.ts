@@ -3,6 +3,7 @@
  */
 
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
+import { parseSkillFlowConfig } from "../config.js";
 import { loadFlow } from "../state/flow-store.js";
 import {
   getSession,
@@ -12,6 +13,11 @@ import {
 } from "../state/session-store.js";
 import { saveFlowHistory } from "../state/history-store.js";
 import { processStep } from "../engine/executor.js";
+import {
+  loadHooks,
+  resolveFlowPath,
+  safeExecuteHook,
+} from "../engine/hooks-loader.js";
 
 export function createFlowStepCommand(api: ClawdbotPluginApi) {
   return async (args: {
@@ -48,23 +54,45 @@ export function createFlowStepCommand(api: ClawdbotPluginApi) {
     const stepId = stepData.substring(0, colonIndex);
     const valueStr = stepData.substring(colonIndex + 1);
 
+    // Load flow first
+    const flow = await loadFlow(api, flowName);
+
+    if (!flow) {
+      return {
+        text: `Flow "${flowName}" not found.`,
+      };
+    }
+
     // Get active session
     const sessionKey = getSessionKey(args.senderId, flowName);
     const session = getSession(sessionKey);
 
     if (!session) {
+      // Load hooks and call onFlowAbandoned
+      if (flow.hooks) {
+        const hooksPath = resolveFlowPath(api, flow.name, flow.hooks);
+        const hooks = await loadHooks(api, hooksPath);
+        if (hooks?.onFlowAbandoned) {
+          await safeExecuteHook(
+            api,
+            "onFlowAbandoned",
+            hooks.onFlowAbandoned,
+            {
+              flowName,
+              currentStepId: stepId,
+              senderId: args.senderId,
+              channel: args.channel,
+              variables: {},
+              startedAt: 0,
+              lastActivityAt: 0,
+            },
+            "timeout"
+          );
+        }
+      }
+
       return {
         text: `Session expired or not found.\n\nUse /flow-start ${flowName} to restart the flow.`,
-      };
-    }
-
-    // Load flow
-    const flow = await loadFlow(api, flowName);
-
-    if (!flow) {
-      deleteSession(sessionKey);
-      return {
-        text: `Flow "${flowName}" not found.`,
       };
     }
 
@@ -72,7 +100,7 @@ export function createFlowStepCommand(api: ClawdbotPluginApi) {
     const value = /^\d+$/.test(valueStr) ? Number(valueStr) : valueStr;
 
     // Process step transition
-    const result = processStep(api, flow, session, stepId, value);
+    const result = await processStep(api, flow, session, stepId, value);
 
     // Update session or cleanup
     if (result.complete) {
@@ -81,7 +109,8 @@ export function createFlowStepCommand(api: ClawdbotPluginApi) {
         ...session,
         variables: result.updatedVariables,
       };
-      await saveFlowHistory(api, finalSession);
+      const config = parseSkillFlowConfig(api.pluginConfig);
+      await saveFlowHistory(api, finalSession, flow, config);
 
       // Cleanup session
       deleteSession(sessionKey);

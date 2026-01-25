@@ -49,6 +49,14 @@ const TriggerSchema = z
   })
   .optional();
 
+// Storage backend schema
+const StorageSchema = z
+  .object({
+    backend: z.string().optional(),
+    builtin: z.boolean().optional(),
+  })
+  .optional();
+
 // Complete flow metadata schema
 export const FlowMetadataSchema = z.object({
   name: z.string(),
@@ -57,6 +65,8 @@ export const FlowMetadataSchema = z.object({
   author: z.string().optional(),
   steps: z.array(FlowStepSchema).min(1),
   triggers: TriggerSchema,
+  hooks: z.string().optional(),
+  storage: StorageSchema,
 });
 
 /**

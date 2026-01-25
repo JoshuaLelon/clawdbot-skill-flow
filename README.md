@@ -15,6 +15,15 @@ Build deterministic, button-driven conversation flows without AI inference overh
 - **History Tracking** - JSONL append-only log for completed flows
 - **Cron Integration** - Schedule flows to run automatically via Clawdbot's cron system
 
+## Requirements
+
+- **Clawdbot**: v2026.1.25 or later (requires Telegram `sendPayload` support)
+  - PR: https://github.com/clawdbot/clawdbot/pull/1917
+  - **Important**: Telegram inline keyboard buttons will not work with older Clawdbot versions
+  - Text-based fallback will work on all versions
+- **Node.js**: 22+ (same as Clawdbot)
+- **Channels**: Currently optimized for Telegram (other channels use text-based menus)
+
 ## Quick Start
 
 ### 1. Install Plugin
@@ -195,6 +204,123 @@ Override default `next` on a per-button basis:
   ]
 }
 ```
+
+### Hooks System
+
+Customize flow behavior at key points without forking the plugin:
+
+```json
+{
+  "name": "pushups",
+  "description": "4-set pushup workout",
+  "hooks": "./hooks.js",
+  "steps": [...]
+}
+```
+
+**Available Hooks:**
+- `onStepRender(step, session)` - Modify step before rendering (e.g., dynamic buttons)
+- `onCapture(variable, value, session)` - Called after variable capture (e.g., log to Google Sheets)
+- `onFlowComplete(session)` - Called when flow completes (e.g., schedule next session)
+- `onFlowAbandoned(session, reason)` - Called on timeout/cancellation (e.g., track completion rates)
+
+**Example hooks file:**
+
+```javascript
+export default {
+  async onStepRender(step, session) {
+    // Generate dynamic buttons based on past performance
+    if (step.id === 'set1') {
+      const average = await calculateAverage(session.senderId);
+      return {
+        ...step,
+        buttons: [average - 5, average, average + 5, average + 10],
+      };
+    }
+    return step;
+  },
+
+  async onCapture(variable, value, session) {
+    // Log to Google Sheets in real-time
+    await sheets.append({
+      spreadsheetId: 'YOUR_SHEET_ID',
+      values: [[new Date(), session.senderId, variable, value]],
+    });
+  },
+
+  async onFlowComplete(session) {
+    // Schedule next workout
+    const nextDate = calculateNextWorkout();
+    await cron.create({
+      schedule: nextDate,
+      message: '/flow-start pushups',
+      userId: session.senderId,
+    });
+  },
+};
+```
+
+See `src/examples/pushups-hooks.example.js` for a complete reference.
+
+### Custom Storage Backends
+
+Replace or supplement the built-in JSONL storage:
+
+```json
+{
+  "name": "pushups",
+  "storage": {
+    "backend": "./storage.js",
+    "builtin": false
+  },
+  "steps": [...]
+}
+```
+
+**StorageBackend Interface:**
+
+```javascript
+export default {
+  async saveSession(session) {
+    // Write to Google Sheets, database, etc.
+  },
+
+  async loadHistory(flowName, options) {
+    // Return historical sessions for analytics
+    return [];
+  },
+};
+```
+
+Set `"builtin": false` to disable JSONL storage and only use the custom backend. Omit it (or set to `true`) to use both.
+
+See `src/examples/sheets-storage.example.js` for a complete reference.
+
+## Security
+
+### Hooks & Storage Backend Safety
+
+The plugin validates that all dynamically loaded files (hooks, storage backends) remain within the `~/.clawdbot/flows/` directory. This prevents directory traversal attacks.
+
+**Valid hook paths:**
+```json
+{
+  "name": "myflow",
+  "hooks": "./hooks.js",           // ✅ Relative to flow directory
+  "hooks": "hooks/custom.js"        // ✅ Subdirectory within flow
+}
+```
+
+**Invalid hook paths (will be rejected):**
+```json
+{
+  "hooks": "/etc/passwd",           // ❌ Absolute path outside flows
+  "hooks": "../../../etc/passwd",   // ❌ Directory traversal
+  "hooks": "~/malicious.js"         // ❌ Tilde expansion outside flows
+}
+```
+
+The plugin uses path validation similar to Clawdbot's core security patterns to ensure hooks and storage backends can only access files within their designated flow directory.
 
 ## How It Works
 

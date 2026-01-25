@@ -8,8 +8,10 @@ import type {
   FlowStep,
   FlowSession,
   TransitionResult,
+  FlowHooks,
 } from "../types.js";
 import { normalizeButton, validateInput } from "../validation.js";
+import { safeExecuteHook } from "./hooks-loader.js";
 
 /**
  * Evaluate condition against session variables
@@ -86,13 +88,14 @@ function findNextStep(
 /**
  * Execute step transition
  */
-export function executeTransition(
-  _api: ClawdbotPluginApi,
+export async function executeTransition(
+  api: ClawdbotPluginApi,
   flow: FlowMetadata,
   session: FlowSession,
   stepId: string,
-  value: string | number
-): TransitionResult {
+  value: string | number,
+  hooks?: FlowHooks | null
+): Promise<TransitionResult> {
   // Find current step
   const step = flow.steps.find((s) => s.id === stepId);
 
@@ -124,10 +127,20 @@ export function executeTransition(
   const updatedVariables = { ...session.variables };
   if (step.capture) {
     // Convert to number if validation type is number
-    if (step.validate === "number") {
-      updatedVariables[step.capture] = Number(value);
-    } else {
-      updatedVariables[step.capture] = valueStr;
+    const capturedValue =
+      step.validate === "number" ? Number(value) : valueStr;
+    updatedVariables[step.capture] = capturedValue;
+
+    // Call onCapture hook
+    if (hooks?.onCapture) {
+      await safeExecuteHook(
+        api,
+        "onCapture",
+        hooks.onCapture,
+        step.capture,
+        capturedValue,
+        { ...session, variables: updatedVariables }
+      );
     }
   }
 

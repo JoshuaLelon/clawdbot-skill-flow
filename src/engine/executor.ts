@@ -3,18 +3,24 @@
  */
 
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
-import type { FlowMetadata, FlowSession, ReplyPayload } from "../types.js";
+import type {
+  FlowMetadata,
+  FlowSession,
+  ReplyPayload,
+  FlowHooks,
+} from "../types.js";
 import { renderStep } from "./renderer.js";
 import { executeTransition } from "./transitions.js";
+import { loadHooks, resolveFlowPath, safeExecuteHook } from "./hooks-loader.js";
 
 /**
  * Start a flow from the beginning
  */
-export function startFlow(
+export async function startFlow(
   api: ClawdbotPluginApi,
   flow: FlowMetadata,
   session: FlowSession
-): ReplyPayload {
+): Promise<ReplyPayload> {
   const firstStep = flow.steps[0];
 
   if (!firstStep) {
@@ -23,24 +29,45 @@ export function startFlow(
     };
   }
 
-  return renderStep(api, flow, firstStep, session, session.channel);
+  // Load hooks if configured
+  let hooks: FlowHooks | null = null;
+  if (flow.hooks) {
+    const hooksPath = resolveFlowPath(api, flow.name, flow.hooks);
+    hooks = await loadHooks(api, hooksPath);
+  }
+
+  return renderStep(api, flow, firstStep, session, session.channel, hooks);
 }
 
 /**
  * Process a step transition and return next step or completion message
  */
-export function processStep(
+export async function processStep(
   api: ClawdbotPluginApi,
   flow: FlowMetadata,
   session: FlowSession,
   stepId: string,
   value: string | number
-): {
+): Promise<{
   reply: ReplyPayload;
   complete: boolean;
   updatedVariables: Record<string, string | number>;
-} {
-  const result = executeTransition(api, flow, session, stepId, value);
+}> {
+  // Load hooks if configured
+  let hooks: FlowHooks | null = null;
+  if (flow.hooks) {
+    const hooksPath = resolveFlowPath(api, flow.name, flow.hooks);
+    hooks = await loadHooks(api, hooksPath);
+  }
+
+  const result = await executeTransition(
+    api,
+    flow,
+    session,
+    stepId,
+    value,
+    hooks
+  );
 
   // Handle errors
   if (result.error) {
@@ -53,6 +80,13 @@ export function processStep(
 
   // Handle completion
   if (result.complete) {
+    const updatedSession = { ...session, variables: result.variables };
+
+    // Call onFlowComplete hook
+    if (hooks?.onFlowComplete) {
+      await safeExecuteHook(api, "onFlowComplete", hooks.onFlowComplete, updatedSession);
+    }
+
     const completionMessage = generateCompletionMessage(flow, result.variables);
     return {
       reply: { text: completionMessage },
@@ -80,7 +114,14 @@ export function processStep(
   }
 
   const updatedSession = { ...session, variables: result.variables };
-  const reply = renderStep(api, flow, nextStep, updatedSession, session.channel);
+  const reply = await renderStep(
+    api,
+    flow,
+    nextStep,
+    updatedSession,
+    session.channel,
+    hooks
+  );
 
   return {
     reply,

@@ -8,8 +8,10 @@ import type {
   FlowStep,
   FlowSession,
   ReplyPayload,
+  FlowHooks,
 } from "../types.js";
 import { normalizeButton } from "../validation.js";
+import { safeExecuteHook } from "./hooks-loader.js";
 
 /**
  * Interpolate variables in message text
@@ -69,7 +71,11 @@ function renderTelegram(
 
   return {
     text: message,
-    buttons: keyboard,
+    channelData: {
+      telegram: {
+        buttons: keyboard,
+      },
+    },
   };
 }
 
@@ -102,18 +108,34 @@ function renderFallback(
 /**
  * Render a flow step
  */
-export function renderStep(
-  _api: ClawdbotPluginApi,
+export async function renderStep(
+  api: ClawdbotPluginApi,
   flow: FlowMetadata,
   step: FlowStep,
   session: FlowSession,
-  channel: string
-): ReplyPayload {
+  channel: string,
+  hooks?: FlowHooks | null
+): Promise<ReplyPayload> {
+  // Call onStepRender hook if available
+  let finalStep = step;
+  if (hooks?.onStepRender) {
+    const modifiedStep = await safeExecuteHook(
+      api,
+      "onStepRender",
+      hooks.onStepRender,
+      step,
+      session
+    );
+    if (modifiedStep) {
+      finalStep = modifiedStep;
+    }
+  }
+
   // Channel-specific rendering
   if (channel === "telegram") {
-    return renderTelegram(flow.name, step, session.variables);
+    return renderTelegram(flow.name, finalStep, session.variables);
   }
 
   // Fallback for all other channels
-  return renderFallback(step, session.variables);
+  return renderFallback(finalStep, session.variables);
 }

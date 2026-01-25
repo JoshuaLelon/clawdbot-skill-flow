@@ -5,7 +5,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
-import type { FlowSession } from "../types.js";
+import type { FlowSession, FlowMetadata } from "../types.js";
+import type { SkillFlowConfig } from "../config.js";
+import {
+  loadStorageBackend,
+  resolveFlowPath,
+} from "../engine/hooks-loader.js";
 
 /**
  * Get history file path for a flow
@@ -20,8 +25,36 @@ function getHistoryPath(api: ClawdbotPluginApi, flowName: string): string {
  */
 export async function saveFlowHistory(
   api: ClawdbotPluginApi,
-  session: FlowSession
+  session: FlowSession,
+  flow?: FlowMetadata,
+  config?: SkillFlowConfig
 ): Promise<void> {
+  // Use custom storage backend if configured
+  if (flow?.storage?.backend) {
+    try {
+      const backendPath = resolveFlowPath(
+        api,
+        session.flowName,
+        flow.storage.backend
+      );
+      const backend = await loadStorageBackend(api, backendPath);
+      if (backend) {
+        await backend.saveSession(session);
+      }
+    } catch (error) {
+      api.logger.error(
+        `Custom storage backend failed for flow ${session.flowName}:`,
+        error
+      );
+    }
+  }
+
+  // Write to built-in JSONL storage unless disabled by config or flow settings
+  const useBuiltin = config?.enableBuiltinHistory ?? flow?.storage?.builtin ?? true;
+  if (!useBuiltin) {
+    return;
+  }
+
   const historyPath = getHistoryPath(api, session.flowName);
 
   try {

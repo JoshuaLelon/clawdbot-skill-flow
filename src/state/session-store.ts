@@ -3,18 +3,36 @@
  */
 
 import type { FlowSession } from "../types.js";
+import type { SkillFlowConfig } from "../config.js";
 
-// Session timeout: 30 minutes
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+// Session timeout: 30 minutes (default, configurable)
+let SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
-// Cleanup interval: 5 minutes
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+// Cleanup interval: 5 minutes (default, configurable)
+let CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 
 // In-memory session store
 const sessions = new Map<string, FlowSession>();
 
 // Cleanup timer
 let cleanupTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Initialize session store with configuration
+ */
+export function initSessionStore(config: SkillFlowConfig): void {
+  SESSION_TIMEOUT_MS = config.sessionTimeoutMinutes * 60 * 1000;
+  CLEANUP_INTERVAL_MS = config.sessionCleanupIntervalMinutes * 60 * 1000;
+
+  // Restart cleanup timer with new interval
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  }
+  if (sessions.size > 0) {
+    cleanupTimer = setInterval(cleanupExpiredSessions, CLEANUP_INTERVAL_MS);
+  }
+}
 
 /**
  * Generate session key

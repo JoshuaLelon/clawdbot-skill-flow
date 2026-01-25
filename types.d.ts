@@ -14,6 +14,7 @@ declare module "lockfile" {
 
 declare module "clawdbot/plugin-sdk" {
   export interface ClawdbotPluginApi {
+    pluginConfig?: Record<string, unknown>;
     logger: {
       info(...args: any[]): void;
       error(...args: any[]): void;
