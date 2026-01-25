@@ -231,24 +231,6 @@ This enables deterministic, instant responses for structured workflows.
     ├── metadata.json
     └── history.jsonl
 ```
-
-## Roadmap
-
-### v0.2.0
-- LLM-driven steps (e.g., "Ask user for feedback, then summarize")
-- External service integrations (Google Sheets, webhooks)
-- Flow analytics dashboard (completion rates, drop-off points)
-
-### v0.3.0
-- Visual flow builder (web UI)
-- Loops and repeats
-- Sub-flows (call another flow as a step)
-
-### v1.0.0
-- Production-ready comprehensive tests
-- Performance optimizations
-- Migration guides
-
 ## Contributing
 
 Issues and PRs welcome! This plugin follows Clawdbot's coding conventions.
