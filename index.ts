@@ -3,6 +3,9 @@
  */
 
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { parseSkillFlowConfig } from "./src/config.js";
 import { initSessionStore, createSession, getSessionKey } from "./src/state/session-store.js";
 import { createFlowStartCommand } from "./src/commands/flow-start.js";
@@ -15,12 +18,17 @@ import { startFlow } from "./src/engine/executor.js";
 import { FlowMetadataSchema } from "./src/validation.js";
 import type { FlowMetadata } from "./src/types.js";
 
+// Read metadata from package.json
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const packageJson = JSON.parse(
+  readFileSync(join(__dirname, "package.json"), "utf-8")
+) as { version: string; description: string };
+
 const plugin = {
   id: "skill-flow",
   name: "Skill Flow",
-  description:
-    "Multi-step workflow orchestration for deterministic command execution",
-  version: "0.1.0",
+  description: packageJson.description,
+  version: packageJson.version,
 
   register(api: ClawdbotPluginApi) {
     // Parse and validate config
