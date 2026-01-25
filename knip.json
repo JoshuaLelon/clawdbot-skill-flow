@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "include": [
+    "files",
+    "dependencies",
+    "exports",
+    "types",
+    "enumMembers",
+    "classMembers"
+  ],
+  "exclude": ["unresolved"],
+  "project": ["src/**/*.ts", "tests/**/*.ts"],
+  "entry": ["index.ts"],
+  "ignore": ["types.d.ts", "src/examples/**"],
+  "ignoreDependencies": ["lint-staged"],
+  "ignoreExportsUsedInFile": true
+}

@@ -1,0 +1,41 @@
+{
+  "name": "survey",
+  "description": "Customer satisfaction survey with conditional branching",
+  "version": "1.0.0",
+  "author": "Clawdbot Team",
+  "triggers": {
+    "manual": true
+  },
+  "steps": [
+    {
+      "id": "satisfaction",
+      "message": "How satisfied are you with our service?",
+      "buttons": ["⭐", "⭐⭐", "⭐⭐⭐", "⭐⭐⭐⭐", "⭐⭐⭐⭐⭐"],
+      "capture": "satisfaction",
+      "next": "nps"
+    },
+    {
+      "id": "nps",
+      "message": "On a scale of 0-10, how likely are you to recommend us?",
+      "buttons": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      "capture": "nps",
+      "validate": "number",
+      "condition": {
+        "variable": "nps",
+        "greaterThan": 7,
+        "next": "positive-feedback"
+      },
+      "next": "negative-feedback"
+    },
+    {
+      "id": "positive-feedback",
+      "message": "Great to hear! 🎉 What did you love most about our service?",
+      "capture": "feedback"
+    },
+    {
+      "id": "negative-feedback",
+      "message": "We're sorry to hear that. What can we improve?",
+      "capture": "feedback"
+    }
+  ]
+}

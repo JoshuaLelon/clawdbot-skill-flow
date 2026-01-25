@@ -1,0 +1,41 @@
+{
+  "name": "onboarding",
+  "description": "User onboarding wizard with email validation",
+  "version": "1.0.0",
+  "author": "Clawdbot Team",
+  "triggers": {
+    "manual": true
+  },
+  "steps": [
+    {
+      "id": "welcome",
+      "message": "👋 Welcome! Let's get you set up.\n\nWhat's your name?",
+      "capture": "name",
+      "next": "preferences"
+    },
+    {
+      "id": "preferences",
+      "message": "Nice to meet you, {{name}}!\n\nWhat are you interested in?",
+      "buttons": [
+        "Productivity",
+        "Fitness",
+        "Learning",
+        "Entertainment"
+      ],
+      "capture": "interests",
+      "next": "email"
+    },
+    {
+      "id": "email",
+      "message": "What's your email address?",
+      "capture": "email",
+      "validate": "email",
+      "next": "confirm"
+    },
+    {
+      "id": "confirm",
+      "message": "Perfect! Here's what we have:\n\n• Name: {{name}}\n• Interests: {{interests}}\n• Email: {{email}}\n\nReady to get started?",
+      "buttons": ["Yes, let's go!", "Start over"]
+    }
+  ]
+}

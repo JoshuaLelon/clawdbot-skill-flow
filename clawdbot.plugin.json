@@ -1,0 +1,8 @@
+{
+  "id": "skill-flow",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

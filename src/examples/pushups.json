@@ -1,0 +1,49 @@
+{
+  "name": "pushups",
+  "description": "4-set pushup workout tracker",
+  "version": "1.0.0",
+  "author": "Clawdbot Team",
+  "triggers": {
+    "manual": true,
+    "cron": "45 13 * * *"
+  },
+  "steps": [
+    {
+      "id": "reminder",
+      "message": "🏋️ Time for your daily pushup workout!\n\nReady to start?",
+      "buttons": ["Yes, let's go!", "Skip today"],
+      "next": "set1"
+    },
+    {
+      "id": "set1",
+      "message": "Set 1: How many pushups did you do?",
+      "buttons": [20, 25, 30, 35, 40],
+      "capture": "set1",
+      "validate": "number",
+      "next": "set2"
+    },
+    {
+      "id": "set2",
+      "message": "Great! Set 2: How many pushups?",
+      "buttons": [20, 25, 30, 35, 40],
+      "capture": "set2",
+      "validate": "number",
+      "next": "set3"
+    },
+    {
+      "id": "set3",
+      "message": "Awesome! Set 3: How many?",
+      "buttons": [20, 25, 30, 35, 40],
+      "capture": "set3",
+      "validate": "number",
+      "next": "set4"
+    },
+    {
+      "id": "set4",
+      "message": "Final set! How many pushups?",
+      "buttons": [20, 25, 30, 35, 40],
+      "capture": "set4",
+      "validate": "number"
+    }
+  ]
+}
