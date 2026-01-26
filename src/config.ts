@@ -2,6 +2,11 @@ import { z } from "zod";
 
 export const SkillFlowConfigSchema = z
   .object({
+    flowsDir: z
+      .string()
+      .optional()
+      .describe("Custom flows directory (default: ~/.clawdbot/flows)"),
+
     sessionTimeoutMinutes: z
       .number()
       .int()
@@ -35,11 +40,25 @@ export const SkillFlowConfigSchema = z
 
 export type SkillFlowConfig = z.infer<typeof SkillFlowConfigSchema>;
 
+// Store parsed config for access by other modules
+let pluginConfig: SkillFlowConfig | null = null;
+
 /**
  * Parse and validate plugin config with defaults
  */
 export function parseSkillFlowConfig(
   raw: unknown
 ): SkillFlowConfig {
-  return SkillFlowConfigSchema.parse(raw ?? {});
+  pluginConfig = SkillFlowConfigSchema.parse(raw ?? {});
+  return pluginConfig;
+}
+
+/**
+ * Get the current plugin config (must call parseSkillFlowConfig first)
+ */
+export function getPluginConfig(): SkillFlowConfig {
+  if (!pluginConfig) {
+    throw new Error("Plugin config not initialized. Call parseSkillFlowConfig first.");
+  }
+  return pluginConfig;
 }

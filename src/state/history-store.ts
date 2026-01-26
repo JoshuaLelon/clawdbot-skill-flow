@@ -7,17 +7,31 @@ import path from "node:path";
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
 import type { FlowSession, FlowMetadata } from "../types.js";
 import type { SkillFlowConfig } from "../config.js";
+import { getPluginConfig } from "../config.js";
 import {
   loadStorageBackend,
   resolveFlowPath,
 } from "../engine/hooks-loader.js";
 
 /**
+ * Get the flows directory path (same logic as flow-store.ts)
+ */
+function getFlowsDir(api: ClawdbotPluginApi): string {
+  const config = getPluginConfig();
+  if (config.flowsDir) {
+    const expandedPath = config.flowsDir.replace(/^~/, process.env.HOME || "~");
+    return path.resolve(expandedPath);
+  }
+  const stateDir = api.runtime.state.resolveStateDir();
+  return path.join(stateDir, "flows");
+}
+
+/**
  * Get history file path for a flow
  */
 function getHistoryPath(api: ClawdbotPluginApi, flowName: string): string {
-  const stateDir = api.runtime.state.resolveStateDir();
-  return path.join(stateDir, "flows", flowName, "history.jsonl");
+  const flowsDir = getFlowsDir(api);
+  return path.join(flowsDir, flowName, "history.jsonl");
 }
 
 /**

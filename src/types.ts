@@ -43,6 +43,8 @@ export interface FlowMetadata {
     backend?: string; // Path to custom storage backend
     builtin?: boolean; // Also write to JSONL (default: true)
   };
+  // Allow extra fields (e.g., job config)
+  [key: string]: unknown;
 }
 
 export interface FlowSession {

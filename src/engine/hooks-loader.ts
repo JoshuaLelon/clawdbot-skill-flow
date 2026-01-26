@@ -10,6 +10,20 @@ import {
   resolvePathSafely,
   validatePathWithinBase,
 } from "../security/path-validation.js";
+import { getPluginConfig } from "../config.js";
+
+/**
+ * Get the flows directory path (same logic as flow-store.ts)
+ */
+function getFlowsDir(api: ClawdbotPluginApi): string {
+  const config = getPluginConfig();
+  if (config.flowsDir) {
+    const expandedPath = config.flowsDir.replace(/^~/, process.env.HOME || "~");
+    return path.resolve(expandedPath);
+  }
+  const stateDir = api.runtime.state.resolveStateDir();
+  return path.join(stateDir, "flows");
+}
 
 /**
  * Load hooks from a file path
@@ -23,7 +37,7 @@ export async function loadHooks(
 ): Promise<FlowHooks | null> {
   try {
     // Validate path is within flows directory
-    const flowsDir = path.join(api.runtime.state.resolveStateDir(), "flows");
+    const flowsDir = getFlowsDir(api);
     validatePathWithinBase(hooksPath, flowsDir, "hooks file");
 
     // Check if file exists
@@ -55,7 +69,7 @@ export async function loadStorageBackend(
 ): Promise<StorageBackend | null> {
   try {
     // Validate path is within flows directory
-    const flowsDir = path.join(api.runtime.state.resolveStateDir(), "flows");
+    const flowsDir = getFlowsDir(api);
     validatePathWithinBase(backendPath, flowsDir, "storage backend");
 
     // Check if file exists
@@ -87,11 +101,8 @@ export function resolveFlowPath(
   flowName: string,
   relativePath: string
 ): string {
-  const flowDir = path.join(
-    api.runtime.state.resolveStateDir(),
-    "flows",
-    flowName
-  );
+  const flowsDir = getFlowsDir(api);
+  const flowDir = path.join(flowsDir, flowName);
 
   // Validate that relativePath doesn't escape flowDir
   return resolvePathSafely(flowDir, relativePath, "flow path");

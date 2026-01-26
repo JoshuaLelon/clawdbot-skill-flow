@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
 import type { FlowMetadata } from "../types.js";
 import { FlowMetadataSchema } from "../validation.js";
+import { getPluginConfig } from "../config.js";
 
 const lock = promisify(lockfile.lock);
 const unlock = promisify(lockfile.unlock);
@@ -17,6 +18,12 @@ const unlock = promisify(lockfile.unlock);
  * Get the flows directory path
  */
 function getFlowsDir(api: ClawdbotPluginApi): string {
+  const config = getPluginConfig();
+  if (config.flowsDir) {
+    // Expand ~ to home directory
+    const expandedPath = config.flowsDir.replace(/^~/, process.env.HOME || "~");
+    return path.resolve(expandedPath);
+  }
   const stateDir = api.runtime.state.resolveStateDir();
   return path.join(stateDir, "flows");
 }

@@ -58,6 +58,7 @@ const StorageSchema = z
   .optional();
 
 // Complete flow metadata schema
+// Use .passthrough() to allow extra fields (e.g., job config)
 export const FlowMetadataSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -67,7 +68,7 @@ export const FlowMetadataSchema = z.object({
   triggers: TriggerSchema,
   hooks: z.string().optional(),
   storage: StorageSchema,
-});
+}).passthrough();
 
 /**
  * Normalize button input to Button object
