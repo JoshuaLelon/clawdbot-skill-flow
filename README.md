@@ -14,6 +14,7 @@ Build deterministic, button-driven conversation flows without AI inference overh
 - **Session Management** - Automatic timeout handling (30 minutes) with in-memory state
 - **History Tracking** - JSONL append-only log for completed flows
 - **Cron Integration** - Schedule flows to run automatically via Clawdbot's cron system
+- **Hooks Utility Library** - Pre-built integrations for Google Sheets, dynamic buttons, scheduling, and more
 
 ## Requirements
 
@@ -224,7 +225,52 @@ Customize flow behavior at key points without forking the plugin:
 - `onFlowComplete(session)` - Called when flow completes (e.g., schedule next session)
 - `onFlowAbandoned(session, reason)` - Called on timeout/cancellation (e.g., track completion rates)
 
-**Example hooks file:**
+#### Hooks Utility Library
+
+The plugin includes an optional hooks utility library with pre-built integrations:
+
+- **Google Sheets** - Log flow data and query history
+- **Dynamic Buttons** - Generate buttons based on historical data
+- **Scheduling** - Schedule recurring workflow sessions
+- **Common Utilities** - Compose hooks, retry logic, validation
+
+**Quick Example:**
+
+```javascript
+// ~/.clawdbot/flows/pushups/hooks.js
+import { createSheetsLogger } from '@joshualelon/clawdbot-skill-flow/hooks/google-sheets';
+import { createDynamicButtons } from '@joshualelon/clawdbot-skill-flow/hooks/dynamic-buttons';
+import { createScheduler } from '@joshualelon/clawdbot-skill-flow/hooks/scheduling';
+
+export default {
+  // Generate buttons based on history
+  onStepRender: createDynamicButtons({
+    spreadsheetId: '1ABC...xyz',
+    variable: 'reps',
+    strategy: 'centered',
+    buttonCount: 5,
+    step: 5
+  }),
+
+  // Log to Google Sheets
+  onCapture: createSheetsLogger({
+    spreadsheetId: '1ABC...xyz',
+    worksheetName: 'Workouts',
+    includeMetadata: true
+  }),
+
+  // Schedule next session
+  onFlowComplete: createScheduler({
+    days: ['mon', 'wed', 'fri'],
+    time: '08:00',
+    timezone: 'America/Chicago'
+  })
+};
+```
+
+**Custom Hooks:**
+
+You can also write custom hooks from scratch:
 
 ```javascript
 export default {
@@ -241,26 +287,20 @@ export default {
   },
 
   async onCapture(variable, value, session) {
-    // Log to Google Sheets in real-time
-    await sheets.append({
-      spreadsheetId: 'YOUR_SHEET_ID',
-      values: [[new Date(), session.senderId, variable, value]],
-    });
+    // Custom logging logic
+    console.log(`Captured ${variable}=${value}`);
   },
 
   async onFlowComplete(session) {
-    // Schedule next workout
-    const nextDate = calculateNextWorkout();
-    await cron.create({
-      schedule: nextDate,
-      message: '/flow-start pushups',
-      userId: session.senderId,
-    });
+    // Custom completion logic
+    console.log('Flow completed:', session);
   },
 };
 ```
 
-See `src/examples/pushups-hooks.example.js` for a complete reference.
+**Documentation:**
+- [Hooks Utility Library Reference](./src/hooks/README.md) - Complete API documentation
+- `src/examples/pushups-hooks.example.js` - Custom hooks example
 
 ### Custom Storage Backends
 

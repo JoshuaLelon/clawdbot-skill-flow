@@ -30,6 +30,12 @@
     "LICENSE",
     "clawdbot.plugin.json"
   ],
+  "exports": {
+    ".": "./index.ts",
+    "./hooks": "./src/hooks/index.ts",
+    "./hooks/*": "./src/hooks/*.ts",
+    "./types": "./src/types.ts"
+  },
   "clawdbot": {
     "extensions": [
       "./index.ts"
@@ -39,7 +45,17 @@
     "lockfile": "^1.0.4",
     "zod": "^3.22.4"
   },
+  "peerDependencies": {
+    "clawdbot": ">=2026.1.0",
+    "googleapis": ">=140.0.0"
+  },
+  "peerDependenciesMeta": {
+    "googleapis": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "googleapis": "^144.0.0",
     "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "^1.0.0",
     "dependency-cruiser": "^17.0.0",
@@ -50,9 +66,6 @@
     "oxlint": "^0.15.0",
     "typescript": "^5.3.0",
     "vitest": "^1.0.0"
-  },
-  "peerDependencies": {
-    "clawdbot": ">=2026.1.0"
   },
   "scripts": {
     "test": "vitest run",
