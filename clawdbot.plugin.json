@@ -4,6 +4,9 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "flowsDir": {
+        "type": "string"
+      },
       "sessionTimeoutMinutes": {
         "type": "number",
         "minimum": 1,
@@ -28,6 +31,10 @@
     }
   },
   "uiHints": {
+    "flowsDir": {
+      "label": "Flows Directory",
+      "help": "Custom directory for flow definitions (default: ~/.clawdbot/flows). Use ~/clawd/jobs for job tracking system."
+    },
     "sessionTimeoutMinutes": {
       "label": "Session Timeout (minutes)",
       "help": "How long before inactive flow sessions expire (1-1440 minutes)"
