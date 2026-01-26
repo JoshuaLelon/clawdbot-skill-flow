@@ -25,7 +25,7 @@ const packageJson = JSON.parse(
 ) as { version: string; description: string };
 
 const plugin = {
-  id: "skill-flow",
+  id: "clawdbot-skill-flow",
   name: "Skill Flow",
   description: packageJson.description,
   version: packageJson.version,
