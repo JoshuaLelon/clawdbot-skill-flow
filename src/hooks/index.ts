@@ -36,13 +36,21 @@ export { createSheetsLogger, appendToSheet, querySheetHistory } from "./google-s
 // Re-export dynamic buttons utilities
 export { createDynamicButtons, getRecentAverage, generateButtonRange } from "./dynamic-buttons.js";
 
-// Re-export scheduling utilities
+// Re-export scheduling utilities (Google Calendar)
 export {
   createScheduler,
   scheduleNextSession,
   checkCalendarConflicts,
   findNextAvailableSlot,
 } from "./scheduling.js";
+
+// Re-export ClawdBot native cron scheduling
+export {
+  createClawdBotScheduler,
+  scheduleOneTimeReminder,
+  listCronJobs,
+  removeCronJob,
+} from "./clawdbot-scheduler.js";
 
 // Re-export LLM adapter utilities
 export { createLLMAdapter } from "./llm-adapter.js";

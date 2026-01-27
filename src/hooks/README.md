@@ -1047,7 +1047,7 @@ Create a hook that schedules the next workflow session after completion.
 - `calendarCheck` (boolean, optional): Check for conflicts (default: false)
 - `rescheduleOnConflict` (boolean, optional): Find alternative slot (default: false)
 
-**Note:** The scheduling utilities are placeholders that log schedules. Integrate with your scheduling system (cron, job queue, etc.) by wrapping the `scheduleNextSession` function.
+**Note:** These scheduling utilities use Google Calendar to create calendar events. For native ClawdBot cron jobs, see "ClawdBot Native Scheduling" below.
 
 #### `scheduleNextSession(flowName, userId, nextDate)`
 
@@ -1071,6 +1071,140 @@ Find the next available time slot.
 
 ```javascript
 const nextSlot = await findNextAvailableSlot([new Date('2026-01-27T08:00:00Z')], 60);
+```
+
+## ClawdBot Native Scheduling
+
+Schedule flows using ClawdBot's built-in cron system. This is the recommended approach for most use cases.
+
+### Comparison: Google Calendar vs ClawdBot Native
+
+| Feature | Google Calendar | ClawdBot Native |
+|---------|----------------|-----------------|
+| **Setup** | Requires Google credentials | No setup required |
+| **Conflict detection** | Yes | No |
+| **Cron syntax** | No (day/time only) | Yes (full cron) |
+| **Integration** | Creates calendar events | Native cron jobs |
+| **Use case** | Calendar-aware scheduling | Simple recurring tasks |
+
+### Basic Usage
+
+```javascript
+// ~/.clawdbot/flows/pushups/hooks.js
+import { createClawdBotScheduler } from '@joshualelon/clawdbot-skill-flow/hooks/clawdbot-scheduler';
+
+export default {
+  onFlowComplete: createClawdBotScheduler({
+    schedule: '0 8 * * 1,3,5',  // Mon/Wed/Fri at 8am (cron syntax)
+    timezone: 'America/Los_Angeles',
+    message: '/flow_start pushups',
+    channel: 'telegram',
+    to: '@your_username'
+  })
+};
+```
+
+### API Reference
+
+#### `createClawdBotScheduler(config)`
+
+Create a hook that schedules the next workflow session using ClawdBot's cron system.
+
+**Config:**
+- `schedule` (string, required): Cron expression (e.g., `'0 8 * * 1,3,5'`)
+- `timezone` (string, optional): IANA timezone (default: 'UTC')
+- `message` (string, required): Message to send when triggered (e.g., `/flow_start pushups`)
+- `channel` (string, required): Platform ('telegram', 'whatsapp', 'discord', etc.)
+- `to` (string, required): Target user/chat (username, phone number, or chat ID)
+- `name` (string, optional): Job name (defaults to `{flowName}-{senderId}`)
+- `sessionType` ('main' | 'isolated', optional): Session isolation (default: 'isolated')
+- `deleteAfterRun` (boolean, optional): Auto-delete after first run (default: false)
+
+**Cron syntax examples:**
+- `'0 8 * * 1,3,5'` - Mon/Wed/Fri at 8:00 AM
+- `'30 7 * * *'` - Every day at 7:30 AM
+- `'0 */2 * * *'` - Every 2 hours
+- `'0 12 1 * *'` - 1st of month at noon
+
+#### `scheduleOneTimeReminder(config)`
+
+Schedule a one-time reminder at a specific time.
+
+```javascript
+import { scheduleOneTimeReminder } from '@joshualelon/clawdbot-skill-flow/hooks/clawdbot-scheduler';
+
+await scheduleOneTimeReminder({
+  at: '2026-01-27T15:00:00Z',  // ISO timestamp
+  message: '/flow_start pushups',
+  channel: 'telegram',
+  to: '@username'
+});
+
+// Or use relative time
+await scheduleOneTimeReminder({
+  at: '20m',  // 20 minutes from now
+  message: 'Time for pushups!',
+  channel: 'telegram',
+  to: '@username'
+});
+```
+
+#### `listCronJobs()`
+
+List all active cron jobs.
+
+```javascript
+import { listCronJobs } from '@joshualelon/clawdbot-skill-flow/hooks/clawdbot-scheduler';
+
+const jobs = await listCronJobs();
+console.log(`Active jobs:`, jobs);
+```
+
+#### `removeCronJob(jobId)`
+
+Remove a cron job by ID.
+
+```javascript
+import { removeCronJob } from '@joshualelon/clawdbot-skill-flow/hooks/clawdbot-scheduler';
+
+await removeCronJob('job_abc123');
+```
+
+### Advanced Example: Pushups with Reminder
+
+```javascript
+// ~/.clawdbot/flows/pushups/hooks.js
+import { createClawdBotScheduler, scheduleOneTimeReminder } from '@joshualelon/clawdbot-skill-flow/hooks/clawdbot-scheduler';
+
+export default {
+  // Schedule next session when flow completes
+  onFlowComplete: createClawdBotScheduler({
+    schedule: '0 8 * * 1,3,5',  // Mon/Wed/Fri at 8am
+    timezone: 'America/Los_Angeles',
+    message: '/flow_start pushups',
+    channel: 'telegram',
+    to: process.env.TELEGRAM_USER
+  })
+};
+
+// Custom action to send 15-min reminder
+export async function sendReminder(step, session) {
+  const sessionTime = session.variables.sessionTime;  // e.g., "2026-01-27T08:00:00Z"
+
+  if (sessionTime) {
+    const reminderTime = new Date(sessionTime);
+    reminderTime.setMinutes(reminderTime.getMinutes() - 15);
+
+    await scheduleOneTimeReminder({
+      at: reminderTime.toISOString(),
+      message: '🔔 Pushups session in 15 minutes!',
+      channel: 'telegram',
+      to: process.env.TELEGRAM_USER
+    });
+  }
+
+  return step;
+}
 ```
 
 ## Common Utilities

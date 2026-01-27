@@ -25,6 +25,9 @@ declare module "clawdbot/plugin-sdk" {
       state: {
         resolveStateDir(): string;
       };
+      gateway?: {
+        call(method: string, params?: any): Promise<any>;
+      };
     };
     registerCommand(config: {
       name: string;
@@ -33,5 +36,9 @@ declare module "clawdbot/plugin-sdk" {
       requireAuth: boolean;
       handler: (args: any) => Promise<any>;
     }): void;
+    registerGatewayMethod?(
+      name: string,
+      handler: (context: { respond: (success: boolean, data: any) => void }) => void
+    ): void;
   }
 }
