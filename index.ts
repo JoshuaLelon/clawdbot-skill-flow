@@ -13,6 +13,7 @@ import { createFlowStepCommand } from "./src/commands/flow-step.js";
 import { createFlowCreateCommand } from "./src/commands/flow-create.js";
 import { createFlowListCommand } from "./src/commands/flow-list.js";
 import { createFlowDeleteCommand } from "./src/commands/flow-delete.js";
+import { createFlowGenerateCommand } from "./src/commands/flow-generate.js";
 import { saveFlow, loadFlow, listFlows } from "./src/state/flow-store.js";
 import { startFlow } from "./src/engine/executor.js";
 import { FlowMetadataSchema } from "./src/validation.js";
@@ -78,9 +79,17 @@ const plugin = {
       handler: createFlowDeleteCommand(api),
     });
 
+    api.registerCommand({
+      name: "flow_generate",
+      description: "Generate a flow from natural language (AI-powered)",
+      acceptsArgs: true,
+      requireAuth: true,
+      handler: createFlowGenerateCommand(api),
+    });
+
     // Register gateway methods for programmatic access
     // @ts-expect-error - registerGatewayMethod exists at runtime, types will be available in future clawdbot release
-    api.registerGatewayMethod("skill-flow.create", async ({ params, respond }) => {
+    api.registerGatewayMethod("clawdbot-skill-flow.create", async ({ params, respond }) => {
       try {
         const flow: FlowMetadata = FlowMetadataSchema.parse(params);
         await saveFlow(api, flow);
@@ -99,7 +108,7 @@ const plugin = {
     });
 
     // @ts-expect-error - registerGatewayMethod exists at runtime, types will be available in future clawdbot release
-    api.registerGatewayMethod("skill-flow.list", async ({ respond }) => {
+    api.registerGatewayMethod("clawdbot-skill-flow.list", async ({ respond }) => {
       try {
         const flows = await listFlows(api);
         respond(true, {
@@ -119,7 +128,7 @@ const plugin = {
     });
 
     // @ts-expect-error - registerGatewayMethod exists at runtime, types will be available in future clawdbot release
-    api.registerGatewayMethod("skill-flow.start", async ({ params, respond }) => {
+    api.registerGatewayMethod("clawdbot-skill-flow.start", async ({ params, respond }) => {
       try {
         const { flowName, senderId, channel } = params as {
           flowName: string;

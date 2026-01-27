@@ -6,12 +6,150 @@ import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
 import type {
   FlowMetadata,
   FlowSession,
+  FlowStep,
   ReplyPayload,
-  FlowHooks,
+  LoadedHooks,
+  ConditionalAction,
+  FetchAction,
+  BeforeRenderAction,
 } from "../types.js";
 import { renderStep } from "./renderer.js";
 import { executeTransition } from "./transitions.js";
-import { loadHooks, resolveFlowPath, safeExecuteHook } from "./hooks-loader.js";
+import { loadHooks, resolveFlowPath, safeExecuteHook, safeExecuteAction, validateFlowActions } from "./hooks-loader.js";
+
+/**
+ * Determine if an action should execute based on conditional logic
+ */
+export function shouldExecuteAction(
+  action: ConditionalAction,
+  session: FlowSession
+): { execute: boolean; actionName: string } {
+  // Check if condition is specified
+  if (action.if) {
+    const conditionValue = session.variables[action.if];
+    const execute = Boolean(conditionValue);
+    return { execute, actionName: action.action };
+  }
+
+  // No condition, always execute
+  return { execute: true, actionName: action.action };
+}
+
+/**
+ * Execute step-level actions (fetch, beforeRender)
+ */
+async function executeStepActions(
+  api: ClawdbotPluginApi,
+  step: FlowStep,
+  session: FlowSession,
+  hooks: LoadedHooks | null
+): Promise<{ step: FlowStep; session: FlowSession }> {
+  if (!hooks || !step.actions) {
+    return { step, session };
+  }
+
+  let modifiedStep = step;
+  let modifiedSession = { ...session };
+
+  // 1. Execute fetch actions - inject variables into session
+  if (step.actions.fetch) {
+    for (const [varName, action] of Object.entries(step.actions.fetch)) {
+      // Check if action should execute
+      const { execute, actionName } = shouldExecuteAction(action, modifiedSession);
+
+      if (!execute) {
+        api.logger.debug(
+          `Skipping fetch action "${actionName}" for variable "${varName}" - condition not met`
+        );
+        continue;
+      }
+
+      const fetchFn = hooks.actions[actionName] as FetchAction | undefined;
+      if (fetchFn) {
+        // Validate signature before calling
+        if (fetchFn.length !== 1 && fetchFn.length !== 0) {
+          api.logger.error(
+            `Fetch action "${actionName}" has invalid signature. Expected 1 parameter (session), got ${fetchFn.length}`
+          );
+          continue;
+        }
+
+        const result = await safeExecuteAction(
+          api,
+          actionName,
+          fetchFn,
+          modifiedSession
+        );
+        if (result && typeof result === "object") {
+          // Only inject the requested variable, not all keys
+          if (varName in result) {
+            const value = result[varName];
+            // Validate that the value is a string or number
+            if (typeof value === "string" || typeof value === "number") {
+              modifiedSession = {
+                ...modifiedSession,
+                variables: {
+                  ...modifiedSession.variables,
+                  [varName]: value,
+                },
+              };
+            } else {
+              api.logger.warn(
+                `Fetch action "${actionName}" returned invalid type for "${varName}". ` +
+                `Expected string or number, got ${typeof value}`
+              );
+            }
+          } else {
+            // Warn if action didn't return the expected variable
+            api.logger.warn(
+              `Fetch action "${actionName}" did not return variable "${varName}". ` +
+              `Returned keys: ${Object.keys(result).join(', ')}`
+            );
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Execute beforeRender actions - modify step
+  if (step.actions.beforeRender) {
+    for (const action of step.actions.beforeRender) {
+      // Check if action should execute
+      const { execute, actionName } = shouldExecuteAction(action, modifiedSession);
+
+      if (!execute) {
+        api.logger.debug(
+          `Skipping beforeRender action "${actionName}" - condition not met`
+        );
+        continue;
+      }
+
+      const beforeRenderFn = hooks.actions[actionName] as BeforeRenderAction | undefined;
+      if (beforeRenderFn) {
+        // Validate signature before calling
+        if (beforeRenderFn.length !== 2 && beforeRenderFn.length !== 0) {
+          api.logger.error(
+            `BeforeRender action "${actionName}" has invalid signature. Expected 2 parameters (step, session), got ${beforeRenderFn.length}`
+          );
+          continue;
+        }
+
+        const result = await safeExecuteAction(
+          api,
+          actionName,
+          beforeRenderFn,
+          modifiedStep,
+          modifiedSession
+        );
+        if (result) {
+          modifiedStep = result as FlowStep;
+        }
+      }
+    }
+  }
+
+  return { step: modifiedStep, session: modifiedSession };
+}
 
 /**
  * Start a flow from the beginning
@@ -21,7 +159,7 @@ export async function startFlow(
   flow: FlowMetadata,
   session: FlowSession
 ): Promise<ReplyPayload> {
-  const firstStep = flow.steps[0];
+  let firstStep = flow.steps[0];
 
   if (!firstStep) {
     return {
@@ -30,11 +168,46 @@ export async function startFlow(
   }
 
   // Load hooks if configured
-  let hooks: FlowHooks | null = null;
+  let hooks: LoadedHooks | null = null;
   if (flow.hooks) {
     const hooksPath = resolveFlowPath(api, flow.name, flow.hooks);
     hooks = await loadHooks(api, hooksPath);
+
+    // Validate that all action references in the flow exist
+    if (hooks) {
+      validateFlowActions(flow, hooks, api);
+    }
   }
+
+  // Inject environment variables into session
+  if (flow.env) {
+    const resolvedEnv: Record<string, string | number> = {};
+
+    for (const [varName, envKey] of Object.entries(flow.env)) {
+      const value = process.env[envKey];
+      if (value !== undefined) {
+        resolvedEnv[varName] = value;
+      } else {
+        api.logger.warn(
+          `Flow "${flow.name}" requires environment variable "${envKey}" ` +
+          `(for session variable "${varName}") but it is not set`
+        );
+      }
+    }
+
+    session = {
+      ...session,
+      variables: {
+        ...session.variables,
+        ...resolvedEnv,
+      },
+    };
+  }
+
+  // Execute step actions before rendering
+  const actionResult = await executeStepActions(api, firstStep, session, hooks);
+  firstStep = actionResult.step;
+  session = actionResult.session;
 
   return renderStep(api, flow, firstStep, session, session.channel, hooks);
 }
@@ -54,10 +227,15 @@ export async function processStep(
   updatedVariables: Record<string, string | number>;
 }> {
   // Load hooks if configured
-  let hooks: FlowHooks | null = null;
+  let hooks: LoadedHooks | null = null;
   if (flow.hooks) {
     const hooksPath = resolveFlowPath(api, flow.name, flow.hooks);
     hooks = await loadHooks(api, hooksPath);
+
+    // Validate that all action references in the flow exist
+    if (hooks) {
+      validateFlowActions(flow, hooks, api);
+    }
   }
 
   const result = await executeTransition(
@@ -83,8 +261,8 @@ export async function processStep(
     const updatedSession = { ...session, variables: result.variables };
 
     // Call onFlowComplete hook
-    if (hooks?.onFlowComplete) {
-      await safeExecuteHook(api, "onFlowComplete", hooks.onFlowComplete, updatedSession);
+    if (hooks?.lifecycle?.onFlowComplete) {
+      await safeExecuteHook(api, "onFlowComplete", hooks.lifecycle.onFlowComplete, updatedSession);
     }
 
     const completionMessage = generateCompletionMessage(flow, result.variables);
@@ -104,7 +282,7 @@ export async function processStep(
     };
   }
 
-  const nextStep = flow.steps.find((s) => s.id === result.nextStepId);
+  let nextStep = flow.steps.find((s) => s.id === result.nextStepId);
   if (!nextStep) {
     return {
       reply: { text: `Error: Step ${result.nextStepId} not found` },
@@ -113,7 +291,13 @@ export async function processStep(
     };
   }
 
-  const updatedSession = { ...session, variables: result.variables };
+  let updatedSession = { ...session, variables: result.variables };
+
+  // Execute step actions before rendering
+  const actionResult = await executeStepActions(api, nextStep, updatedSession, hooks);
+  nextStep = actionResult.step;
+  updatedSession = actionResult.session;
+
   const reply = await renderStep(
     api,
     flow,
@@ -126,7 +310,7 @@ export async function processStep(
   return {
     reply,
     complete: false,
-    updatedVariables: result.variables,
+    updatedVariables: updatedSession.variables,
   };
 }
 

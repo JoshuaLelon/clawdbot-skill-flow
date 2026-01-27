@@ -43,3 +43,6 @@ export {
   checkCalendarConflicts,
   findNextAvailableSlot,
 } from "./scheduling.js";
+
+// Re-export LLM adapter utilities
+export { createLLMAdapter } from "./llm-adapter.js";

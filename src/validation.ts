@@ -29,6 +29,19 @@ const ConditionSchema = z.object({
   next: z.string(),
 });
 
+// Conditional action schema
+const ConditionalActionSchema = z.object({
+  action: z.string().describe("Action function name"),
+  if: z.string().optional().describe("Optional: Variable name to check (truthy = execute). Omit for always execute."),
+});
+
+// Step actions schema
+const StepActionsSchema = z.object({
+  fetch: z.record(ConditionalActionSchema).optional(),
+  beforeRender: z.array(ConditionalActionSchema).optional(),
+  afterCapture: z.array(ConditionalActionSchema).optional(),
+}).optional();
+
 // Flow step schema
 const FlowStepSchema = z.object({
   id: z.string(),
@@ -38,6 +51,7 @@ const FlowStepSchema = z.object({
   capture: z.string().optional(),
   validate: ValidationTypeSchema.optional(),
   condition: ConditionSchema.optional(),
+  actions: StepActionsSchema,
 });
 
 // Trigger schema
@@ -67,6 +81,10 @@ export const FlowMetadataSchema = z.object({
   steps: z.array(FlowStepSchema).min(1),
   triggers: TriggerSchema,
   hooks: z.string().optional(),
+  env: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe("Environment variables to inject into session"),
   storage: StorageSchema,
 }).passthrough();
 

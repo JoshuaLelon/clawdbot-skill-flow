@@ -1,0 +1,54 @@
+{
+  "name": "pushups",
+  "description": "4-set pushup workout tracker with dynamic buttons and Google Sheets logging",
+  "version": "1.0.0",
+  "hooks": "./hooks.js",
+  "steps": [
+    {
+      "id": "set1",
+      "message": "Set 1: How many pushups?",
+      "actions": {
+        "fetch": {
+          "historicalAverage": "getHistoricalAverage"
+        },
+        "beforeRender": ["generateDynamicButtons"],
+        "afterCapture": ["logToSheets"]
+      },
+      "capture": "set1",
+      "validate": "number",
+      "next": "set2"
+    },
+    {
+      "id": "set2",
+      "message": "Great! Set 2?",
+      "actions": {
+        "beforeRender": ["generateDynamicButtons"],
+        "afterCapture": ["logToSheets"]
+      },
+      "capture": "set2",
+      "validate": "number",
+      "next": "set3"
+    },
+    {
+      "id": "set3",
+      "message": "Nice! Set 3?",
+      "actions": {
+        "beforeRender": ["generateDynamicButtons"],
+        "afterCapture": ["logToSheets"]
+      },
+      "capture": "set3",
+      "validate": "number",
+      "next": "set4"
+    },
+    {
+      "id": "set4",
+      "message": "Final set!",
+      "actions": {
+        "beforeRender": ["generateDynamicButtons"],
+        "afterCapture": ["logToSheets"]
+      },
+      "capture": "set4",
+      "validate": "number"
+    }
+  ]
+}

@@ -2,7 +2,7 @@
  * Hooks loader - Dynamically loads and executes flow hooks
  */
 
-import type { FlowHooks, StorageBackend } from "../types.js";
+import type { FlowHooks, StorageBackend, LoadedHooks } from "../types.js";
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -11,6 +11,7 @@ import {
   validatePathWithinBase,
 } from "../security/path-validation.js";
 import { getPluginConfig } from "../config.js";
+import { withTimeout, TimeoutError } from "../security/timeout.js";
 
 /**
  * Get the flows directory path (same logic as flow-store.ts)
@@ -29,12 +30,12 @@ function getFlowsDir(api: ClawdbotPluginApi): string {
  * Load hooks from a file path
  * @param api - Plugin API for logging
  * @param hooksPath - Absolute path to hooks file
- * @returns FlowHooks object or null if loading fails
+ * @returns LoadedHooks object with lifecycle hooks and actions, or null if loading fails
  */
 export async function loadHooks(
   api: ClawdbotPluginApi,
   hooksPath: string
-): Promise<FlowHooks | null> {
+): Promise<LoadedHooks | null> {
   try {
     // Validate path is within flows directory
     const flowsDir = getFlowsDir(api);
@@ -46,11 +47,30 @@ export async function loadHooks(
     // Dynamically import the hooks module
     const hooksModule = await import(hooksPath);
 
-    // Support both default export and named export
-    const hooks: FlowHooks = hooksModule.default ?? hooksModule;
+    // Extract default export for lifecycle hooks
+    let moduleExport = hooksModule.default ?? {};
 
-    api.logger.debug(`Loaded hooks from ${hooksPath}`);
-    return hooks;
+    // Support factory functions that take API and return lifecycle hooks
+    if (typeof moduleExport === "function") {
+      moduleExport = moduleExport(api);
+    }
+
+    // Extract global lifecycle hooks from default export
+    const lifecycle: FlowHooks = {
+      onFlowComplete: moduleExport?.onFlowComplete,
+      onFlowAbandoned: moduleExport?.onFlowAbandoned,
+    };
+
+    // Extract all named exports as step-level actions
+    const actions: Record<string, Function> = {};
+    for (const [key, value] of Object.entries(hooksModule)) {
+      if (key !== "default" && typeof value === "function") {
+        actions[key] = value;
+      }
+    }
+
+    api.logger.debug(`Loaded hooks from ${hooksPath}: ${Object.keys(actions).length} actions, ${Object.keys(lifecycle).filter(k => lifecycle[k as keyof FlowHooks]).length} lifecycle hooks`);
+    return { lifecycle, actions };
   } catch (error) {
     api.logger.warn(`Failed to load hooks from ${hooksPath}:`, error);
     return null;
@@ -126,11 +146,144 @@ export async function safeExecuteHook<T, Args extends unknown[]>(
     return undefined;
   }
 
+  const config = getPluginConfig();
+  const timeout = config.security.hookTimeout;
+
   try {
-    const result = await hookFn(...args);
+    const result = await withTimeout(
+      () => Promise.resolve(hookFn(...args)),
+      timeout,
+      `Hook "${hookName}" timed out after ${timeout}ms`
+    );
     return result;
   } catch (error) {
-    api.logger.error(`Hook ${hookName} failed:`, error);
+    const isTimeout = error instanceof TimeoutError;
+    const errorMsg = isTimeout
+      ? `Hook ${hookName} timed out after ${timeout}ms`
+      : `Hook ${hookName} failed: ${error}`;
+
+    api.logger.error(errorMsg);
     return undefined;
+  }
+}
+
+/**
+ * Safe action executor - wraps action calls with error handling
+ * @param api - Plugin API for logging
+ * @param actionName - Name of the action being called
+ * @param actionFn - The action function to execute
+ * @param args - Arguments to pass to the action
+ * @returns Result of action or undefined if action fails
+ */
+export async function safeExecuteAction<T, Args extends unknown[]>(
+  api: ClawdbotPluginApi,
+  actionName: string,
+  actionFn: ((...args: Args) => T | Promise<T>) | undefined,
+  ...args: Args
+): Promise<T | undefined> {
+  if (!actionFn) {
+    api.logger.warn(`Action ${actionName} not found in hooks`);
+    return undefined;
+  }
+
+  const config = getPluginConfig();
+  const strategy = config.actions?.fetchFailureStrategy || "warn";
+  const timeout = config.security.actionTimeout;
+
+  try {
+    const result = await withTimeout(
+      () => Promise.resolve(actionFn(...args)),
+      timeout,
+      `Action "${actionName}" timed out after ${timeout}ms`
+    );
+    return result;
+  } catch (error) {
+    const isTimeout = error instanceof TimeoutError;
+    const errorMsg = isTimeout
+      ? `Action ${actionName} timed out after ${timeout}ms`
+      : `Action ${actionName} failed: ${error}`;
+
+    if (strategy === "stop") {
+      api.logger.error(errorMsg);
+      throw error; // Re-throw to stop flow execution
+    } else if (strategy === "warn") {
+      api.logger.warn(errorMsg);
+    }
+    // 'silent' strategy logs nothing
+
+    return undefined;
+  }
+}
+
+/**
+ * Extract action name from ConditionalAction
+ */
+function getActionName(action: import("../types.js").ConditionalAction): string {
+  return action.action;
+}
+
+/**
+ * Validate that all actions referenced in flow steps exist in hooks
+ * @param flow - Flow metadata with steps
+ * @param hooks - Loaded hooks with actions
+ * @param api - Plugin API for logging
+ * @throws Error if any action references are invalid
+ */
+export function validateFlowActions(
+  flow: import("../types.js").FlowMetadata,
+  hooks: LoadedHooks,
+  api: ClawdbotPluginApi
+): void {
+  const availableActions = Object.keys(hooks.actions);
+  const errors: string[] = [];
+
+  for (const step of flow.steps) {
+    if (!step.actions) continue;
+
+    // Validate fetch actions
+    if (step.actions.fetch) {
+      for (const [varName, action] of Object.entries(step.actions.fetch)) {
+        const actionName = getActionName(action);
+        if (!availableActions.includes(actionName)) {
+          errors.push(
+            `Step "${step.id}": fetch action "${actionName}" not found (for variable "${varName}")`
+          );
+        }
+      }
+    }
+
+    // Validate beforeRender actions
+    if (step.actions.beforeRender) {
+      for (const action of step.actions.beforeRender) {
+        const actionName = getActionName(action);
+        if (!availableActions.includes(actionName)) {
+          errors.push(
+            `Step "${step.id}": beforeRender action "${actionName}" not found`
+          );
+        }
+      }
+    }
+
+    // Validate afterCapture actions
+    if (step.actions.afterCapture) {
+      for (const action of step.actions.afterCapture) {
+        const actionName = getActionName(action);
+        if (!availableActions.includes(actionName)) {
+          errors.push(
+            `Step "${step.id}": afterCapture action "${actionName}" not found`
+          );
+        }
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    const errorMsg = `Flow "${flow.name}" has invalid action references:\n${errors.join('\n')}`;
+    api.logger.error(errorMsg);
+
+    throw new Error(
+      `Flow "${flow.name}" references ${errors.length} action(s) that don't exist in hooks file. ` +
+      `Available actions: ${availableActions.join(', ') || '(none)'}`
+    );
   }
 }

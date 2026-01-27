@@ -1,6 +1,6 @@
 {
   "name": "@joshualelon/clawdbot-skill-flow",
-  "version": "0.5.1",
+  "version": "1.0.0",
   "type": "module",
   "description": "Multi-step workflow orchestration plugin for Clawdbot",
   "keywords": [
@@ -27,6 +27,7 @@
     "index.ts",
     "types.d.ts",
     "README.md",
+    "SKILL.md",
     "LICENSE",
     "clawdbot.plugin.json"
   ],
@@ -78,7 +79,7 @@
     "check:dead-code": "knip",
     "check:duplicates": "jscpd src",
     "check": "pnpm lint && pnpm typecheck && pnpm check:deps && pnpm check:dead-code && pnpm check:duplicates && pnpm test:coverage",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "lint-staged": {
     "*.ts": [

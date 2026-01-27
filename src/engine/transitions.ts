@@ -8,10 +8,14 @@ import type {
   FlowStep,
   FlowSession,
   TransitionResult,
-  FlowHooks,
+  LoadedHooks,
+  AfterCaptureAction,
 } from "../types.js";
 import { normalizeButton, validateInput } from "../validation.js";
-import { safeExecuteHook } from "./hooks-loader.js";
+import { safeExecuteAction } from "./hooks-loader.js";
+import { sanitizeInput } from "../security/input-sanitization.js";
+import { getPluginConfig } from "../config.js";
+import { shouldExecuteAction } from "./executor.js";
 
 /**
  * Evaluate condition against session variables
@@ -94,7 +98,7 @@ export async function executeTransition(
   session: FlowSession,
   stepId: string,
   value: string | number,
-  hooks?: FlowHooks | null
+  hooks?: LoadedHooks | null
 ): Promise<TransitionResult> {
   // Find current step
   const step = flow.steps.find((s) => s.id === stepId);
@@ -126,21 +130,63 @@ export async function executeTransition(
   // Capture variable if specified
   const updatedVariables = { ...session.variables };
   if (step.capture) {
+    // Sanitize input before capturing
+    let sanitizedValue: string | number;
+    try {
+      const config = getPluginConfig();
+      sanitizedValue = sanitizeInput(value, config);
+    } catch (error) {
+      api.logger.warn(
+        `Input sanitization failed for step "${stepId}": ${error instanceof Error ? error.message : String(error)}`
+      );
+      return {
+        error: "Invalid input",
+        message:
+          "Your input contains invalid characters or exceeds length limits.",
+        variables: updatedVariables,
+        complete: false,
+      };
+    }
+
     // Convert to number if validation type is number
     const capturedValue =
-      step.validate === "number" ? Number(value) : valueStr;
+      step.validate === "number" ? Number(sanitizedValue) : String(sanitizedValue);
     updatedVariables[step.capture] = capturedValue;
 
-    // Call onCapture hook
-    if (hooks?.onCapture) {
-      await safeExecuteHook(
-        api,
-        "onCapture",
-        hooks.onCapture,
-        step.capture,
-        capturedValue,
-        { ...session, variables: updatedVariables }
-      );
+    // Execute afterCapture actions
+    if (step.actions?.afterCapture && hooks) {
+      const updatedSession = { ...session, variables: updatedVariables };
+      for (const action of step.actions.afterCapture) {
+        // Check if action should execute
+        const { execute, actionName } = shouldExecuteAction(action, updatedSession);
+
+        if (!execute) {
+          api.logger.debug(
+            `Skipping afterCapture action "${actionName}" - condition not met`
+          );
+          continue;
+        }
+
+        const afterCaptureFn = hooks.actions[actionName] as AfterCaptureAction | undefined;
+        if (afterCaptureFn) {
+          // Validate signature before calling
+          if (afterCaptureFn.length !== 3 && afterCaptureFn.length !== 0) {
+            api.logger.error(
+              `AfterCapture action "${actionName}" has invalid signature. Expected 3 parameters (variable, value, session), got ${afterCaptureFn.length}`
+            );
+            continue;
+          }
+
+          await safeExecuteAction(
+            api,
+            actionName,
+            afterCaptureFn,
+            step.capture,
+            capturedValue,
+            updatedSession
+          );
+        }
+      }
     }
   }
 

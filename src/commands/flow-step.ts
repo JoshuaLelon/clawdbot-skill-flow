@@ -72,11 +72,11 @@ export function createFlowStepCommand(api: ClawdbotPluginApi) {
       if (flow.hooks) {
         const hooksPath = resolveFlowPath(api, flow.name, flow.hooks);
         const hooks = await loadHooks(api, hooksPath);
-        if (hooks?.onFlowAbandoned) {
+        if (hooks?.lifecycle?.onFlowAbandoned) {
           await safeExecuteHook(
             api,
             "onFlowAbandoned",
-            hooks.onFlowAbandoned,
+            hooks.lifecycle.onFlowAbandoned,
             {
               flowName,
               currentStepId: stepId,

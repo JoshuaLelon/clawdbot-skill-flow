@@ -10,6 +10,11 @@ export interface Button {
   next?: string;
 }
 
+export interface ConditionalAction {
+  action: string; // Action function name
+  if?: string; // Optional: Variable name to check (truthy = execute). Omit for always execute.
+}
+
 export interface FlowStep {
   id: string;
   message: string;
@@ -25,6 +30,11 @@ export interface FlowStep {
     contains?: string;
     next: string;
   };
+  actions?: {
+    fetch?: Record<string, ConditionalAction>;
+    beforeRender?: ConditionalAction[];
+    afterCapture?: ConditionalAction[];
+  };
 }
 
 export interface FlowMetadata {
@@ -39,6 +49,7 @@ export interface FlowMetadata {
     event?: string;
   };
   hooks?: string; // Path to hooks file (relative to flow directory)
+  env?: Record<string, string>; // Environment variable mapping: { sessionVar: "ENV_VAR_NAME" }
   storage?: {
     backend?: string; // Path to custom storage backend
     builtin?: boolean; // Also write to JSONL (default: true)
@@ -75,33 +86,28 @@ export interface ReplyPayload {
 }
 
 /**
- * Hooks interface for customizing flow behavior at key points.
- * All hooks are optional and async-compatible.
+ * Action function signatures for step-level hooks
+ */
+export type FetchAction = (
+  session: FlowSession
+) => Promise<Record<string, unknown>>;
+
+export type BeforeRenderAction = (
+  step: FlowStep,
+  session: FlowSession
+) => FlowStep | Promise<FlowStep>;
+
+export type AfterCaptureAction = (
+  variable: string,
+  value: string | number,
+  session: FlowSession
+) => void | Promise<void>;
+
+/**
+ * Global lifecycle hooks for flow-level events.
+ * Step-level actions should be exported as named exports from hooks file.
  */
 export interface FlowHooks {
-  /**
-   * Called before rendering a step. Return modified step (e.g., dynamic buttons).
-   * @param step - The step about to be rendered
-   * @param session - Current session state (variables, history)
-   * @returns Modified step or original
-   */
-  onStepRender?: (
-    step: FlowStep,
-    session: FlowSession
-  ) => FlowStep | Promise<FlowStep>;
-
-  /**
-   * Called after a variable is captured. Use for external logging.
-   * @param variable - Variable name
-   * @param value - Captured value
-   * @param session - Current session state
-   */
-  onCapture?: (
-    variable: string,
-    value: string | number,
-    session: FlowSession
-  ) => void | Promise<void>;
-
   /**
    * Called when flow completes (reaches terminal step). Use for follow-up actions.
    * @param session - Final session state with all captured variables
@@ -117,6 +123,33 @@ export interface FlowHooks {
     session: FlowSession,
     reason: "timeout" | "cancelled" | "error"
   ) => void | Promise<void>;
+
+  /**
+   * @deprecated Use step-level actions instead.
+   * Called before rendering a step. Return modified step (e.g., dynamic buttons).
+   */
+  onStepRender?: (
+    step: FlowStep,
+    session: FlowSession
+  ) => FlowStep | Promise<FlowStep>;
+
+  /**
+   * @deprecated Use step-level actions instead.
+   * Called after a variable is captured. Use for external logging.
+   */
+  onCapture?: (
+    variable: string,
+    value: string | number,
+    session: FlowSession
+  ) => void | Promise<void>;
+}
+
+/**
+ * Loaded hooks structure with lifecycle hooks and step-level actions
+ */
+export interface LoadedHooks {
+  lifecycle: FlowHooks;
+  actions: Record<string, Function>;
 }
 
 /**

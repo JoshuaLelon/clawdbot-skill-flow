@@ -8,10 +8,9 @@ import type {
   FlowStep,
   FlowSession,
   ReplyPayload,
-  FlowHooks,
+  LoadedHooks,
 } from "../types.js";
 import { normalizeButton } from "../validation.js";
-import { safeExecuteHook } from "./hooks-loader.js";
 
 /**
  * Interpolate variables in message text
@@ -106,36 +105,35 @@ function renderFallback(
 }
 
 /**
- * Render a flow step
+ * Render a flow step for the user's channel
+ *
+ * Note: Step actions (fetch, beforeRender) are now executed in executor.ts
+ * before this function is called. The api and hooks parameters are retained for:
+ * - API consistency with other engine functions
+ * - Future extensibility (e.g., channel-specific rendering hooks)
+ * - Backwards compatibility if deprecated hooks are re-enabled
+ *
+ * @param _api - Plugin API (reserved for future use)
+ * @param flow - Flow metadata
+ * @param step - Step to render (already modified by beforeRender actions)
+ * @param session - Current session with variables (already populated by fetch actions)
+ * @param channel - Target channel (telegram, slack, etc.)
+ * @param _hooks - Loaded hooks (reserved for future use)
+ * @returns Rendered message payload for the channel
  */
 export async function renderStep(
-  api: ClawdbotPluginApi,
+  _api: ClawdbotPluginApi,
   flow: FlowMetadata,
   step: FlowStep,
   session: FlowSession,
   channel: string,
-  hooks?: FlowHooks | null
+  _hooks?: LoadedHooks | null
 ): Promise<ReplyPayload> {
-  // Call onStepRender hook if available
-  let finalStep = step;
-  if (hooks?.onStepRender) {
-    const modifiedStep = await safeExecuteHook(
-      api,
-      "onStepRender",
-      hooks.onStepRender,
-      step,
-      session
-    );
-    if (modifiedStep) {
-      finalStep = modifiedStep;
-    }
-  }
-
   // Channel-specific rendering
   if (channel === "telegram") {
-    return renderTelegram(flow.name, finalStep, session.variables);
+    return renderTelegram(flow.name, step, session.variables);
   }
 
   // Fallback for all other channels
-  return renderFallback(finalStep, session.variables);
+  return renderFallback(step, session.variables);
 }

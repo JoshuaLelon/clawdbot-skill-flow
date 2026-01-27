@@ -7,6 +7,8 @@ Build deterministic, button-driven conversation flows without AI inference overh
 ## Features
 
 - **Deterministic Execution** - Telegram button callbacks route directly to plugin commands, bypassing LLM entirely
+- **LLM-Powered Flow Generation** - Generate complete flows from natural language descriptions
+- **Adaptive Step Modification** - AI-powered hooks that personalize messages based on user context
 - **Multi-Step Workflows** - Chain steps with conditional branching and variable capture
 - **Channel Rendering** - Telegram inline keyboards with automatic fallback to text-based menus
 - **Input Validation** - Built-in validators for numbers, emails, and phone numbers
@@ -36,7 +38,7 @@ clawdbot plugins install @joshualelon/clawdbot-skill-flow
 ### 2. Create a Flow
 
 ```bash
-clawdbot message send "/flow-create import $(cat <<'EOF'
+clawdbot message send "/flow_create import $(cat <<'EOF'
 {
   "name": "daily-checkin",
   "description": "Daily wellness check-in",
@@ -65,18 +67,54 @@ EOF
 ### 3. Run the Flow
 
 ```bash
-/flow-start daily-checkin
+/flow_start daily-checkin
+```
+
+## Configuration
+
+The plugin supports several configuration options:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `flowsDir` | string | `~/.clawdbot/flows` | Custom directory for flow definitions |
+| `sessionTimeoutMinutes` | number | `30` | Session timeout (1-1440 minutes) |
+| `sessionCleanupIntervalMinutes` | number | `5` | Cleanup check interval (1-60 minutes) |
+| `enableBuiltinHistory` | boolean | `true` | Save completed flows to .jsonl files |
+| `maxFlowsPerUser` | number | unlimited | Limit concurrent flows per user |
+| `llm.flowGenerationTimeout` | number | `30000` | Flow generation timeout (ms) |
+| `llm.adaptationTimeout` | number | `5000` | Step adaptation timeout (ms) |
+| `llm.maxTokens` | number | `4096` | Max tokens for responses |
+| `llm.temperature` | number | `0.7` | Response creativity (0-2) |
+
+**Note:** LLM features use Clawdbot's Claude configuration automatically. Provider/model settings are inherited from Clawdbot.
+
+### Setting Configuration
+
+```bash
+# Use custom flows directory (e.g., for job tracking system)
+clawdbot config set plugins.entries.clawdbot-skill-flow.config.flowsDir "~/clawd/jobs"
+
+# Adjust session timeout to 60 minutes
+clawdbot config set plugins.entries.clawdbot-skill-flow.config.sessionTimeoutMinutes 60
+
+# Disable built-in history (if using custom storage backend)
+clawdbot config set plugins.entries.clawdbot-skill-flow.config.enableBuiltinHistory false
+
+# Restart gateway to apply changes
+systemctl --user restart clawdbot-gateway  # Linux
+# or restart via Clawdbot Mac app menu
 ```
 
 ## Commands
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `/flow-start <name>` | Start a flow | `/flow-start pushups` |
-| `/flow-list` | List all flows | `/flow-list` |
-| `/flow-create import <json>` | Create flow from JSON | See Quick Start |
-| `/flow-delete <name>` | Delete a flow | `/flow-delete pushups` |
-| `/flow-step` | Internal command (callback handler) | N/A |
+| `/flow_start <name>` | Start a flow | `/flow_start pushups` |
+| `/flow_list` | List all flows | `/flow_list` |
+| `/flow_create import <json>` | Create flow from JSON | See Quick Start |
+| `/flow_generate <description>` | Generate flow from natural language (AI) | `/flow_generate Create a mood tracker` |
+| `/flow_delete <name>` | Delete a flow | `/flow_delete pushups` |
+| `/flow_step` | Internal command (callback handler) | N/A |
 
 ## Example Flows
 
@@ -85,7 +123,7 @@ EOF
 4-set pushup tracker with rep counting:
 
 ```bash
-clawdbot message send "/flow-create import $(cat src/examples/pushups.json)"
+clawdbot message send "/flow_create import $(cat src/examples/pushups.json)"
 ```
 
 ### Customer Survey
@@ -93,7 +131,7 @@ clawdbot message send "/flow-create import $(cat src/examples/pushups.json)"
 Satisfaction survey with conditional branching (high vs low scores):
 
 ```bash
-clawdbot message send "/flow-create import $(cat src/examples/survey.json)"
+clawdbot message send "/flow_create import $(cat src/examples/survey.json)"
 ```
 
 ### Onboarding Wizard
@@ -101,7 +139,7 @@ clawdbot message send "/flow-create import $(cat src/examples/survey.json)"
 Multi-step setup with email validation and variable interpolation:
 
 ```bash
-clawdbot message send "/flow-create import $(cat src/examples/onboarding.json)"
+clawdbot message send "/flow_create import $(cat src/examples/onboarding.json)"
 ```
 
 ## Flow Schema
@@ -139,7 +177,7 @@ clawdbot cron add \
   --name "daily-pushups" \
   --schedule "45 13 * * *" \
   --session-target isolated \
-  --message "/flow-start pushups" \
+  --message "/flow_start pushups" \
   --channel telegram \
   --to "+1234567890"
 ```
@@ -149,6 +187,113 @@ Verify:
 ```bash
 clawdbot cron list
 ```
+
+## LLM-Powered Features
+
+Skill Flow now supports AI-powered features that bridge deterministic execution with adaptive intelligence:
+
+### Flow Generation
+
+Generate complete flows from natural language descriptions:
+
+```bash
+/flow_generate Create a 4-set pushup tracker with progressive difficulty
+```
+
+The AI will:
+- Design appropriate steps and branching logic
+- Add validation for captured data
+- Create natural, conversational messages
+- Structure the flow according to best practices
+
+**Preview before saving:**
+
+```bash
+# Generate flow
+/flow_generate Create a daily wellness check-in with mood and sleep tracking
+
+# Review preview and JSON
+# If satisfied, save it:
+/flow_generate save
+
+# Or cancel:
+/flow_generate cancel
+
+# Start the flow
+/flow_start wellness-checkin
+```
+
+### Adaptive Step Modification
+
+Make your flows adaptive with LLM-powered hooks that personalize messages based on user context:
+
+```javascript
+// ~/.clawdbot/flows/pushups/hooks.js
+import { createLLMAdapter } from '@joshualelon/clawdbot-skill-flow/hooks/llm-adapter';
+
+export default (api) => ({
+  onStepRender: createLLMAdapter(api, {
+    adaptMessage: true,
+    adaptButtons: true,
+    includeVariables: true
+  })
+});
+```
+
+**What it does:**
+- Personalizes messages based on captured variables
+- Adapts button labels to be more contextual
+- Makes conversations feel natural and engaging
+- Falls back gracefully if LLM unavailable
+
+**Example transformation:**
+
+```
+Original: "Set 2: How many pushups?"
+Adapted: "Nice work on those 25 reps! Ready for set 2?"
+```
+
+**Compose with other hooks:**
+
+```javascript
+import { composeHooks } from '@joshualelon/clawdbot-skill-flow/hooks';
+import { createDynamicButtons } from '@joshualelon/clawdbot-skill-flow/hooks/dynamic-buttons';
+import { createLLMAdapter } from '@joshualelon/clawdbot-skill-flow/hooks/llm-adapter';
+
+export default (api) => ({
+  onStepRender: composeHooks(
+    // First: Generate button values from history
+    createDynamicButtons({
+      variable: 'reps',
+      strategy: 'centered'
+    }),
+    // Then: Adapt message and labels with AI
+    createLLMAdapter(api, {
+      adaptMessage: true,
+      adaptButtons: true,
+      preserveButtonValues: true
+    })
+  )
+});
+```
+
+**Configuration:**
+
+LLM features use Clawdbot's configured Claude instance (no separate API keys needed). You can optionally adjust performance settings:
+
+```bash
+# Adjust timeouts (optional)
+clawdbot config set plugins.entries.clawdbot-skill-flow.config.llm.flowGenerationTimeout 30000
+clawdbot config set plugins.entries.clawdbot-skill-flow.config.llm.adaptationTimeout 5000
+
+# Adjust creativity/token limits (optional)
+clawdbot config set plugins.entries.clawdbot-skill-flow.config.llm.temperature 0.7
+clawdbot config set plugins.entries.clawdbot-skill-flow.config.llm.maxTokens 4096
+```
+
+**Documentation:**
+- [LLM Adapter API Reference](./src/hooks/README.md#llm-adapter) - Complete configuration options
+- `src/examples/llm-adapter.example.js` - Usage examples
 
 ## Advanced Features
 
@@ -206,101 +351,164 @@ Override default `next` on a per-button basis:
 }
 ```
 
-### Hooks System
+### Step-Level Actions System
 
-Customize flow behavior at key points without forking the plugin:
+Skill-flow uses **explicit step-level actions** instead of implicit global hooks. This makes flows self-documenting, LLM-generatable, and easier to understand.
+
+#### Actions in Flow JSON
+
+Each step can declare what actions to execute:
 
 ```json
 {
   "name": "pushups",
   "description": "4-set pushup workout",
+  "version": "1.0.0",
   "hooks": "./hooks.js",
-  "steps": [...]
+  "steps": [
+    {
+      "id": "set1",
+      "message": "Set 1: How many pushups?",
+      "actions": {
+        "fetch": {
+          "historicalAverage": "getHistoricalAverage"
+        },
+        "beforeRender": ["generateDynamicButtons"],
+        "afterCapture": ["logToSheets"]
+      },
+      "capture": "set1",
+      "validate": "number",
+      "next": "set2"
+    }
+  ]
 }
 ```
 
-**Available Hooks:**
-- `onStepRender(step, session)` - Modify step before rendering (e.g., dynamic buttons)
-- `onCapture(variable, value, session)` - Called after variable capture (e.g., log to Google Sheets)
-- `onFlowComplete(session)` - Called when flow completes (e.g., schedule next session)
-- `onFlowAbandoned(session, reason)` - Called on timeout/cancellation (e.g., track completion rates)
+**Action Types:**
+
+1. **fetch** - Get data before rendering (returns variables to inject)
+   - Format: `{ "varName": "actionFunctionName" }`
+   - Example: Fetch historical workout data to calculate averages
+
+2. **beforeRender** - Modify step before display (returns modified step)
+   - Format: `["actionFunctionName", ...]`
+   - Example: Generate dynamic buttons based on fetched data
+
+3. **afterCapture** - Side effects after capturing variable
+   - Format: `["actionFunctionName", ...]`
+   - Example: Log to Google Sheets, send notifications
+
+#### Hooks File Structure
+
+Action functions are exported as **named exports** from your hooks file:
+
+```javascript
+// ~/.clawdbot/flows/pushups/hooks.js
+
+/**
+ * Fetch action - returns variables to inject
+ */
+export async function getHistoricalAverage(session) {
+  const history = await querySheets(spreadsheetId);
+  const avg = calculateAverage(history);
+  return { historicalAverage: avg };
+}
+
+/**
+ * BeforeRender action - returns modified step
+ */
+export async function generateDynamicButtons(step, session) {
+  const avg = session.variables.historicalAverage || 25;
+  return {
+    ...step,
+    buttons: [avg - 5, avg, avg + 5, avg + 10]
+  };
+}
+
+/**
+ * AfterCapture action - side effects only
+ */
+export async function logToSheets(variable, value, session) {
+  await appendToSheet(spreadsheetId, {
+    date: new Date().toISOString(),
+    [variable]: value
+  });
+}
+
+/**
+ * Global lifecycle hooks (default export)
+ */
+export default {
+  async onFlowComplete(session) {
+    console.log('Workout complete!', session.variables);
+    await scheduleNextWorkout();
+  },
+
+  async onFlowAbandoned(session, reason) {
+    console.log('Flow abandoned:', reason);
+  }
+};
+```
+
+#### Benefits of Step-Level Actions
+
+**Before (Implicit Global Hooks):**
+```javascript
+// Flow JSON doesn't show what happens
+{ "id": "set1", "capture": "set1" }
+
+// Hook has to filter by step ID
+export default {
+  async onStepRender(step, session) {
+    if (step.id === 'set1') {
+      // Hidden logic...
+    }
+  }
+}
+```
+
+**After (Explicit Step-Level Actions):**
+```json
+{
+  "id": "set1",
+  "actions": {
+    "fetch": { "avg": "getAverage" },
+    "beforeRender": ["generateButtons"],
+    "afterCapture": ["logToSheets"]
+  }
+}
+```
+
+Benefits:
+- ✅ Self-documenting (JSON shows what happens)
+- ✅ LLM-generatable (AI can see available actions)
+- ✅ Git-friendly (changes visible in JSON diffs)
+- ✅ Testable (test actions in isolation)
+- ✅ No step.id filtering needed
+
+#### Complete Example
+
+See `src/examples/pushups/` for a complete working example with:
+- Fetch actions for historical data
+- Dynamic button generation
+- Google Sheets logging (mock)
+- Lifecycle hooks for scheduling
 
 #### Hooks Utility Library
 
-The plugin includes an optional hooks utility library with pre-built integrations:
+The plugin includes pre-built integrations (work in progress):
 
 - **Google Sheets** - Log flow data and query history
 - **Dynamic Buttons** - Generate buttons based on historical data
 - **Scheduling** - Schedule recurring workflow sessions
-- **Common Utilities** - Compose hooks, retry logic, validation
+- **Common Utilities** - Compose actions, retry logic, validation
 
-**Quick Example:**
-
-```javascript
-// ~/.clawdbot/flows/pushups/hooks.js
-import { createSheetsLogger } from '@joshualelon/clawdbot-skill-flow/hooks/google-sheets';
-import { createDynamicButtons } from '@joshualelon/clawdbot-skill-flow/hooks/dynamic-buttons';
-import { createScheduler } from '@joshualelon/clawdbot-skill-flow/hooks/scheduling';
-
-export default {
-  // Generate buttons based on history
-  onStepRender: createDynamicButtons({
-    spreadsheetId: '1ABC...xyz',
-    variable: 'reps',
-    strategy: 'centered',
-    buttonCount: 5,
-    step: 5
-  }),
-
-  // Log to Google Sheets
-  onCapture: createSheetsLogger({
-    spreadsheetId: '1ABC...xyz',
-    worksheetName: 'Workouts',
-    includeMetadata: true
-  }),
-
-  // Schedule next session
-  onFlowComplete: createScheduler({
-    days: ['mon', 'wed', 'fri'],
-    time: '08:00',
-    timezone: 'America/Chicago'
-  })
-};
-```
-
-**Custom Hooks:**
-
-You can also write custom hooks from scratch:
-
-```javascript
-export default {
-  async onStepRender(step, session) {
-    // Generate dynamic buttons based on past performance
-    if (step.id === 'set1') {
-      const average = await calculateAverage(session.senderId);
-      return {
-        ...step,
-        buttons: [average - 5, average, average + 5, average + 10],
-      };
-    }
-    return step;
-  },
-
-  async onCapture(variable, value, session) {
-    // Custom logging logic
-    console.log(`Captured ${variable}=${value}`);
-  },
-
-  async onFlowComplete(session) {
-    // Custom completion logic
-    console.log('Flow completed:', session);
-  },
-};
-```
+**Note:** The utility library is being updated to work with the new step-level actions system.
 
 **Documentation:**
-- [Hooks Utility Library Reference](./src/hooks/README.md) - Complete API documentation
-- `src/examples/pushups-hooks.example.js` - Custom hooks example
+- [Hooks & Actions Reference](./src/hooks/README.md) - Complete API documentation
+- `src/examples/pushups/` - Complete working example
+- `src/examples/survey/` - Survey with conditional actions
 
 ### Custom Storage Backends
 

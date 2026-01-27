@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { executeTransition } from "../src/engine/transitions";
+import { parseSkillFlowConfig } from "../src/config";
 import type { FlowMetadata, FlowSession } from "../src/types";
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
 
@@ -28,6 +29,9 @@ describe("executeTransition", () => {
   let testSession: FlowSession;
 
   beforeEach(() => {
+    // Initialize config for tests
+    parseSkillFlowConfig({});
+
     testFlow = {
       name: "test-flow",
       description: "Test flow",

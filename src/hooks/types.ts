@@ -74,3 +74,32 @@ export interface RetryOptions {
   backoff?: boolean; // Use exponential backoff
   maxDelayMs?: number; // Maximum delay cap (default: 30000ms)
 }
+
+/**
+ * LLM Adapter configuration for adaptive step modification
+ */
+export interface LLMAdapterConfig {
+  // When to adapt
+  enabled?: boolean; // Default: true
+  stepFilter?: (step: import("../types.js").FlowStep) => boolean;
+  userFilter?: (session: FlowSession) => boolean;
+
+  // What to adapt
+  adaptMessage?: boolean; // Default: true
+  adaptButtons?: boolean; // Default: true
+  preserveButtonValues?: boolean; // Default: true (only adapt labels, not values)
+
+  // LLM settings
+  provider?: string; // Default: from plugin config
+  model?: string; // Default: from plugin config
+  temperature?: number; // Default: 0.7
+  maxTokens?: number; // Default: 500
+
+  // Context to include
+  includeVariables?: boolean; // Default: true
+  includeFlowMetadata?: boolean; // Default: false
+  maxContextTokens?: number; // Default: 2000
+
+  // Behavior
+  fallbackToOriginal?: boolean; // Default: true (return original step on error)
+}

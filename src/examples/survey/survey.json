@@ -1,0 +1,46 @@
+{
+  "name": "survey",
+  "description": "Customer satisfaction survey with conditional branching",
+  "version": "1.0.0",
+  "hooks": "./hooks.js",
+  "steps": [
+    {
+      "id": "rating",
+      "message": "How would you rate our service?",
+      "buttons": [
+        { "text": "⭐ Poor", "value": 1 },
+        { "text": "⭐⭐ Fair", "value": 2 },
+        { "text": "⭐⭐⭐ Good", "value": 3 },
+        { "text": "⭐⭐⭐⭐ Great", "value": 4 },
+        { "text": "⭐⭐⭐⭐⭐ Excellent", "value": 5 }
+      ],
+      "capture": "rating",
+      "validate": "number",
+      "actions": {
+        "afterCapture": ["logRating"]
+      },
+      "condition": {
+        "variable": "rating",
+        "lessThan": 4,
+        "next": "feedback"
+      },
+      "next": "thanks"
+    },
+    {
+      "id": "feedback",
+      "message": "We're sorry to hear that. What could we improve?",
+      "capture": "feedback",
+      "actions": {
+        "afterCapture": ["logFeedback", "notifySupport"]
+      },
+      "next": "thanks"
+    },
+    {
+      "id": "thanks",
+      "message": "Thank you for your feedback!",
+      "actions": {
+        "beforeRender": ["personalizeThankYou"]
+      }
+    }
+  ]
+}

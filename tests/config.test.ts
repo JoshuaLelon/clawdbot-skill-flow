@@ -41,6 +41,34 @@ describe("parseSkillFlowConfig", () => {
       sessionTimeoutMinutes: -1
     })).toThrow();
   });
+
+  it("should parse LLM config with defaults", () => {
+    const config = parseSkillFlowConfig({});
+    expect(config.llm).toBeDefined();
+    expect(config.llm.defaultProvider).toBe("anthropic");
+    expect(config.llm.defaultModel).toBe("claude-sonnet-4-5");
+    expect(config.llm.flowGenerationTimeout).toBe(30000);
+    expect(config.llm.adaptationTimeout).toBe(5000);
+    expect(config.llm.maxTokens).toBe(4096);
+    expect(config.llm.temperature).toBe(0.7);
+  });
+
+  it("should parse custom LLM config", () => {
+    const config = parseSkillFlowConfig({
+      llm: {
+        temperature: 0.5,
+        maxTokens: 2048,
+        adaptationTimeout: 3000
+      }
+    });
+    expect(config.llm.temperature).toBe(0.5);
+    expect(config.llm.maxTokens).toBe(2048);
+    expect(config.llm.adaptationTimeout).toBe(3000);
+    // Defaults should still apply for unspecified fields
+    expect(config.llm.defaultProvider).toBe("anthropic");
+    expect(config.llm.defaultModel).toBe("claude-sonnet-4-5");
+    expect(config.llm.flowGenerationTimeout).toBe(30000);
+  });
 });
 
 describe("getPluginConfig", () => {

@@ -27,6 +27,43 @@
         "type": "number",
         "minimum": 1,
         "maximum": 1000
+      },
+      "llm": {
+        "type": "object",
+        "properties": {
+          "defaultProvider": {
+            "type": "string",
+            "default": "anthropic"
+          },
+          "defaultModel": {
+            "type": "string",
+            "default": "claude-sonnet-4-5"
+          },
+          "flowGenerationTimeout": {
+            "type": "number",
+            "minimum": 1000,
+            "maximum": 120000,
+            "default": 30000
+          },
+          "adaptationTimeout": {
+            "type": "number",
+            "minimum": 1000,
+            "maximum": 30000,
+            "default": 5000
+          },
+          "maxTokens": {
+            "type": "number",
+            "minimum": 100,
+            "maximum": 8192,
+            "default": 4096
+          },
+          "temperature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2,
+            "default": 0.7
+          }
+        }
       }
     }
   },
@@ -51,6 +88,40 @@
     "maxFlowsPerUser": {
       "label": "Max Flows Per User",
       "help": "Limit concurrent flows per user (leave empty for unlimited)",
+      "advanced": true
+    },
+    "llm": {
+      "label": "LLM Configuration",
+      "help": "Settings for AI-powered flow generation and adaptation"
+    },
+    "llm.defaultProvider": {
+      "label": "Default Provider",
+      "help": "LLM provider to use (e.g., anthropic, openai)",
+      "advanced": true
+    },
+    "llm.defaultModel": {
+      "label": "Default Model",
+      "help": "Model to use for LLM operations (e.g., claude-sonnet-4-5)",
+      "advanced": true
+    },
+    "llm.flowGenerationTimeout": {
+      "label": "Flow Generation Timeout (ms)",
+      "help": "Maximum time for flow generation (1000-120000ms)",
+      "advanced": true
+    },
+    "llm.adaptationTimeout": {
+      "label": "Step Adaptation Timeout (ms)",
+      "help": "Maximum time for step adaptation (1000-30000ms)",
+      "advanced": true
+    },
+    "llm.maxTokens": {
+      "label": "Max Tokens",
+      "help": "Maximum tokens for LLM responses (100-8192)",
+      "advanced": true
+    },
+    "llm.temperature": {
+      "label": "Temperature",
+      "help": "Creativity level (0=focused, 2=creative)",
       "advanced": true
     }
   }

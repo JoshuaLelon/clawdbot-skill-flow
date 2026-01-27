@@ -1,0 +1,19 @@
+{
+  "schedule": {
+    "days": ["mon", "wed", "fri"],
+    "time": "08:00",
+    "timezone": "America/Chicago"
+  },
+  "workout": {
+    "sets": 4,
+    "buttonStep": 5,
+    "buttonCount": 5
+  },
+  "google": {
+    "spreadsheetId": "1pV0sIvPaWTJYpWdAafhZYBHWRZhAJ_E5",
+    "sheetName": "Workouts"
+  },
+  "telegram": {
+    "chatId": "1215923266"
+  }
+}
