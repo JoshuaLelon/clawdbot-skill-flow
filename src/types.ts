@@ -86,21 +86,32 @@ export interface ReplyPayload {
 }
 
 /**
+ * Enhanced API with plugin utilities injected
+ */
+export type EnhancedPluginApi = import("clawdbot/plugin-sdk").ClawdbotPluginApi & {
+  hooks: typeof import("./hooks/index.js");
+};
+
+/**
  * Action function signatures for step-level hooks
+ * All actions receive an optional api parameter for accessing plugin utilities
  */
 export type FetchAction = (
-  session: FlowSession
+  session: FlowSession,
+  api?: EnhancedPluginApi
 ) => Promise<Record<string, unknown>>;
 
 export type BeforeRenderAction = (
   step: FlowStep,
-  session: FlowSession
+  session: FlowSession,
+  api?: EnhancedPluginApi
 ) => FlowStep | Promise<FlowStep>;
 
 export type AfterCaptureAction = (
   variable: string,
   value: string | number,
-  session: FlowSession
+  session: FlowSession,
+  api?: EnhancedPluginApi
 ) => void | Promise<void>;
 
 /**

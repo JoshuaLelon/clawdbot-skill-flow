@@ -10,12 +10,14 @@ import type {
   TransitionResult,
   LoadedHooks,
   AfterCaptureAction,
+  EnhancedPluginApi,
 } from "../types.js";
 import { normalizeButton, validateInput } from "../validation.js";
 import { safeExecuteAction } from "./hooks-loader.js";
 import { sanitizeInput } from "../security/input-sanitization.js";
 import { getPluginConfig } from "../config.js";
 import { shouldExecuteAction } from "./executor.js";
+import * as pluginHooks from "../hooks/index.js";
 
 /**
  * Evaluate condition against session variables
@@ -100,6 +102,12 @@ export async function executeTransition(
   value: string | number,
   hooks?: LoadedHooks | null
 ): Promise<TransitionResult> {
+  // Create enhanced API with plugin utilities
+  const enhancedApi: EnhancedPluginApi = {
+    ...api,
+    hooks: pluginHooks,
+  };
+
   // Find current step
   const step = flow.steps.find((s) => s.id === stepId);
 
@@ -170,9 +178,9 @@ export async function executeTransition(
         const afterCaptureFn = hooks.actions[actionName] as AfterCaptureAction | undefined;
         if (afterCaptureFn) {
           // Validate signature before calling
-          if (afterCaptureFn.length !== 3 && afterCaptureFn.length !== 0) {
+          if (afterCaptureFn.length > 4) {
             api.logger.error(
-              `AfterCapture action "${actionName}" has invalid signature. Expected 3 parameters (variable, value, session), got ${afterCaptureFn.length}`
+              `AfterCapture action "${actionName}" has invalid signature. Expected 3-4 parameters (variable, value, session, api?), got ${afterCaptureFn.length}`
             );
             continue;
           }
@@ -183,7 +191,8 @@ export async function executeTransition(
             afterCaptureFn,
             step.capture,
             capturedValue,
-            updatedSession
+            updatedSession,
+            enhancedApi  // Pass enhanced API with hooks
           );
         }
       }

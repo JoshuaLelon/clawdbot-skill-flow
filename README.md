@@ -229,15 +229,18 @@ Make your flows adaptive with LLM-powered hooks that personalize messages based 
 
 ```javascript
 // ~/.clawdbot/flows/pushups/hooks.js
-import { createLLMAdapter } from '@joshualelon/clawdbot-skill-flow/hooks/llm-adapter';
 
-export default (api) => ({
-  onStepRender: createLLMAdapter(api, {
-    adaptMessage: true,
-    adaptButtons: true,
-    includeVariables: true
-  })
-});
+export default (api) => {
+  const { createLLMAdapter } = api.hooks;
+
+  return {
+    onStepRender: createLLMAdapter(api, {
+      adaptMessage: true,
+      adaptButtons: true,
+      includeVariables: true
+    })
+  };
+};
 ```
 
 **What it does:**
@@ -256,25 +259,25 @@ Adapted: "Nice work on those 25 reps! Ready for set 2?"
 **Compose with other hooks:**
 
 ```javascript
-import { composeHooks } from '@joshualelon/clawdbot-skill-flow/hooks';
-import { createDynamicButtons } from '@joshualelon/clawdbot-skill-flow/hooks/dynamic-buttons';
-import { createLLMAdapter } from '@joshualelon/clawdbot-skill-flow/hooks/llm-adapter';
+export default (api) => {
+  const { composeHooks, createDynamicButtons, createLLMAdapter } = api.hooks;
 
-export default (api) => ({
-  onStepRender: composeHooks(
-    // First: Generate button values from history
-    createDynamicButtons({
-      variable: 'reps',
-      strategy: 'centered'
-    }),
-    // Then: Adapt message and labels with AI
-    createLLMAdapter(api, {
-      adaptMessage: true,
-      adaptButtons: true,
-      preserveButtonValues: true
-    })
-  )
-});
+  return {
+    onStepRender: composeHooks(
+      // First: Generate button values from history
+      createDynamicButtons({
+        variable: 'reps',
+        strategy: 'centered'
+      }),
+      // Then: Adapt message and labels with AI
+      createLLMAdapter(api, {
+        adaptMessage: true,
+        adaptButtons: true,
+        preserveButtonValues: true
+      })
+    )
+  };
+};
 ```
 
 **Configuration:**
@@ -400,7 +403,7 @@ Each step can declare what actions to execute:
 
 #### Hooks File Structure
 
-Action functions are exported as **named exports** from your hooks file:
+Action functions are exported as **named exports** from your hooks file. Plugin utilities are available via the `api.hooks` object:
 
 ```javascript
 // ~/.clawdbot/flows/pushups/hooks.js
@@ -408,28 +411,35 @@ Action functions are exported as **named exports** from your hooks file:
 /**
  * Fetch action - returns variables to inject
  */
-export async function getHistoricalAverage(session) {
-  const history = await querySheets(spreadsheetId);
-  const avg = calculateAverage(history);
-  return { historicalAverage: avg };
+export async function getHistoricalAverage(session, api) {
+  // Access plugin utilities via api.hooks (no imports needed!)
+  const { querySheetHistory } = api.hooks;
+
+  const history = await querySheetHistory('spreadsheet-id', { limit: 10 });
+  const avg = history.reduce((sum, row) => sum + row.reps, 0) / history.length;
+  return { historicalAverage: Math.round(avg) };
 }
 
 /**
  * BeforeRender action - returns modified step
  */
-export async function generateDynamicButtons(step, session) {
+export async function generateDynamicButtons(step, session, api) {
+  const { generateButtonRange } = api.hooks;
+
   const avg = session.variables.historicalAverage || 25;
   return {
     ...step,
-    buttons: [avg - 5, avg, avg + 5, avg + 10]
+    buttons: generateButtonRange(avg, { count: 5, spread: 5 })
   };
 }
 
 /**
  * AfterCapture action - side effects only
  */
-export async function logToSheets(variable, value, session) {
-  await appendToSheet(spreadsheetId, {
+export async function logToSheets(variable, value, session, api) {
+  const { appendToSheet } = api.hooks;
+
+  await appendToSheet('spreadsheet-id', {
     date: new Date().toISOString(),
     [variable]: value
   });
@@ -437,18 +447,32 @@ export async function logToSheets(variable, value, session) {
 
 /**
  * Global lifecycle hooks (default export)
+ * Use factory function to access api.hooks
  */
-export default {
-  async onFlowComplete(session) {
-    console.log('Workout complete!', session.variables);
-    await scheduleNextWorkout();
-  },
+export default (api) => {
+  const { createClawdBotScheduler } = api.hooks;
+  const scheduler = createClawdBotScheduler(api);
 
-  async onFlowAbandoned(session, reason) {
-    console.log('Flow abandoned:', reason);
-  }
+  return {
+    async onFlowComplete(session) {
+      console.log('Workout complete!', session.variables);
+
+      // Schedule next session using plugin utilities
+      await scheduler.schedule({
+        name: `${session.flowName}-next`,
+        schedule: '0 9 * * *', // Daily at 9am
+        message: `/flow_start ${session.flowName}`,
+      });
+    },
+
+    async onFlowAbandoned(session, reason) {
+      console.log('Flow abandoned:', reason);
+    }
+  };
 };
 ```
+
+See the [Hooks API Reference](./src/hooks/README.md) for complete documentation of available utilities.
 
 #### Benefits of Step-Level Actions
 
@@ -605,6 +629,167 @@ This enables deterministic, instant responses for structured workflows.
     ├── metadata.json
     └── history.jsonl
 ```
+
+## Troubleshooting
+
+### Plugin Failed to Load - Missing Dependencies
+
+**Symptom:**
+```
+Error: Cannot find module 'zod'
+Plugin "clawdbot-skill-flow" failed to load
+```
+
+**Cause:** The `clawdbot plugins install` command timed out during npm install, leaving node_modules partially corrupted.
+
+**Fix:**
+```bash
+# 1. Find your plugin directory
+cd ~/.clawdbot/extensions/@joshualelon/clawdbot-skill-flow
+
+# 2. Clean and reinstall dependencies
+rm -rf node_modules package-lock.json
+npm install --omit=optional
+
+# 3. Restart gateway
+systemctl --user restart clawdbot-gateway  # Linux
+# OR
+# Restart from Clawdbot menu bar app (macOS)
+```
+
+### Plugin Install Timeout
+
+**Symptom:**
+```
+npm install timed out
+Plugin installation incomplete
+```
+
+**Cause:** Large dependency tree or slow network connection.
+
+**Solutions:**
+
+1. **Manual install:**
+   ```bash
+   cd ~/.clawdbot/extensions/@joshualelon/clawdbot-skill-flow
+   npm install --timeout=120000
+   ```
+
+2. **Use faster registry (optional):**
+   ```bash
+   npm config set registry https://registry.npmjs.org/
+   npm install
+   ```
+
+3. **Skip optional dependencies:**
+   ```bash
+   npm install --omit=optional --no-audit
+   ```
+
+### Flow Not Found
+
+**Symptom:**
+```
+Flow "my-flow" not found
+```
+
+**Solutions:**
+
+1. **Check flows directory:**
+   ```bash
+   ls ~/.clawdbot/flows/
+   # Or your custom flowsDir
+   ```
+
+2. **Verify flow created:**
+   ```bash
+   /flow_list
+   ```
+
+3. **Check file permissions:**
+   ```bash
+   chmod 644 ~/.clawdbot/flows/my-flow/metadata.json
+   ```
+
+### Telegram Buttons Not Working
+
+**Symptom:** Buttons don't appear or don't respond when clicked.
+
+**Cause:** Clawdbot version doesn't support `sendPayload`.
+
+**Solution:** Upgrade Clawdbot to v2026.1.25+ which includes PR #1917.
+
+Text-based menus will work as fallback on older versions.
+
+### Session Timeout Issues
+
+**Symptom:** "Session expired" messages appear too quickly.
+
+**Solution:** Increase timeout in plugin config:
+
+```bash
+clawdbot config set plugins.entries.clawdbot-skill-flow.config.sessionTimeoutMinutes 60
+```
+
+### Hook Execution Timeout
+
+**Symptom:**
+```
+Action "myAction" timed out after 5000ms
+```
+
+**Solutions:**
+
+1. **Increase action timeout:**
+   ```bash
+   clawdbot config set plugins.entries.clawdbot-skill-flow.config.security.actionTimeout 10000
+   ```
+
+2. **Optimize slow hooks:** Move heavy computation to background jobs.
+
+3. **Use conditional execution:**
+   ```json
+   {
+     "actions": {
+       "fetch": {
+         "data": { "action": "fetchData", "if": "needsData" }
+       }
+     }
+   }
+   ```
+
+### LLM Features Not Working
+
+**Symptom:** `/flow_generate` or LLM adapters fail.
+
+**Cause:** No Claude API configured in Clawdbot.
+
+**Solution:** Configure Claude in Clawdbot settings. The plugin inherits Clawdbot's LLM configuration automatically.
+
+### Debugging Tips
+
+1. **Check plugin logs:**
+   ```bash
+   journalctl --user -u clawdbot-gateway -f  # Linux
+   # OR
+   tail -f ~/Library/Logs/Clawdbot/gateway.log  # macOS
+   ```
+
+2. **Enable debug logging:**
+   ```bash
+   clawdbot config set plugins.entries.clawdbot-skill-flow.config.debug true
+   ```
+
+3. **Test flow JSON manually:**
+   ```bash
+   cat ~/.clawdbot/flows/my-flow/metadata.json | jq .
+   ```
+
+4. **Verify plugin loaded:**
+   ```bash
+   /flow_list  # Should list available flows
+   ```
+
 ## Contributing
 
 Issues and PRs welcome! This plugin follows Clawdbot's coding conventions.

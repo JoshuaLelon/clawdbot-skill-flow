@@ -90,7 +90,7 @@ const mockWorkouts = [];
  *   "message": "Your average is {{historicalAverage}} pushups"
  * }
  */
-export async function getHistoricalAverage(session) {
+export async function getHistoricalAverage(_session) {
   // In real implementation: query Google Sheets
   if (mockHistory.length === 0) {
     return { historicalAverage: 25 };

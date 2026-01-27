@@ -12,10 +12,12 @@ import type {
   ConditionalAction,
   FetchAction,
   BeforeRenderAction,
+  EnhancedPluginApi,
 } from "../types.js";
 import { renderStep } from "./renderer.js";
 import { executeTransition } from "./transitions.js";
 import { loadHooks, resolveFlowPath, safeExecuteHook, safeExecuteAction, validateFlowActions } from "./hooks-loader.js";
+import * as pluginHooks from "../hooks/index.js";
 
 /**
  * Determine if an action should execute based on conditional logic
@@ -48,6 +50,12 @@ async function executeStepActions(
     return { step, session };
   }
 
+  // Create enhanced API with plugin utilities
+  const enhancedApi: EnhancedPluginApi = {
+    ...api,
+    hooks: pluginHooks,
+  };
+
   let modifiedStep = step;
   let modifiedSession = { ...session };
 
@@ -67,9 +75,9 @@ async function executeStepActions(
       const fetchFn = hooks.actions[actionName] as FetchAction | undefined;
       if (fetchFn) {
         // Validate signature before calling
-        if (fetchFn.length !== 1 && fetchFn.length !== 0) {
+        if (fetchFn.length > 2) {
           api.logger.error(
-            `Fetch action "${actionName}" has invalid signature. Expected 1 parameter (session), got ${fetchFn.length}`
+            `Fetch action "${actionName}" has invalid signature. Expected 1-2 parameters (session, api?), got ${fetchFn.length}`
           );
           continue;
         }
@@ -78,7 +86,8 @@ async function executeStepActions(
           api,
           actionName,
           fetchFn,
-          modifiedSession
+          modifiedSession,
+          enhancedApi  // Pass enhanced API with hooks
         );
         if (result && typeof result === "object") {
           // Only inject the requested variable, not all keys
@@ -127,9 +136,9 @@ async function executeStepActions(
       const beforeRenderFn = hooks.actions[actionName] as BeforeRenderAction | undefined;
       if (beforeRenderFn) {
         // Validate signature before calling
-        if (beforeRenderFn.length !== 2 && beforeRenderFn.length !== 0) {
+        if (beforeRenderFn.length > 3) {
           api.logger.error(
-            `BeforeRender action "${actionName}" has invalid signature. Expected 2 parameters (step, session), got ${beforeRenderFn.length}`
+            `BeforeRender action "${actionName}" has invalid signature. Expected 2-3 parameters (step, session, api?), got ${beforeRenderFn.length}`
           );
           continue;
         }
@@ -139,7 +148,8 @@ async function executeStepActions(
           actionName,
           beforeRenderFn,
           modifiedStep,
-          modifiedSession
+          modifiedSession,
+          enhancedApi  // Pass enhanced API with hooks
         );
         if (result) {
           modifiedStep = result as FlowStep;

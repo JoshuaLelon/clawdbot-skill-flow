@@ -12,6 +12,7 @@ import {
 } from "../security/path-validation.js";
 import { getPluginConfig } from "../config.js";
 import { withTimeout, TimeoutError } from "../security/timeout.js";
+import * as pluginHooks from "../hooks/index.js";
 
 /**
  * Get the flows directory path (same logic as flow-store.ts)
@@ -51,8 +52,13 @@ export async function loadHooks(
     let moduleExport = hooksModule.default ?? {};
 
     // Support factory functions that take API and return lifecycle hooks
+    // Inject plugin hooks utilities into the API for easy access
     if (typeof moduleExport === "function") {
-      moduleExport = moduleExport(api);
+      const enhancedApi = {
+        ...api,
+        hooks: pluginHooks, // Make plugin utilities available via api.hooks
+      };
+      moduleExport = moduleExport(enhancedApi);
     }
 
     // Extract global lifecycle hooks from default export
