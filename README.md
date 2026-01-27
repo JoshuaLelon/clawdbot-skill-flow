@@ -403,7 +403,33 @@ Each step can declare what actions to execute:
 
 #### Hooks File Structure
 
-Action functions are exported as **named exports** from your hooks file. Plugin utilities are available via the `api.hooks` object:
+Action functions are exported as **named exports** from your hooks file. All actions receive an `api` parameter as their final argument - plugin utilities are available via `api.hooks`.
+
+> **Note:** No imports needed! Just destructure what you need from `api.hooks`.
+
+**Action Signatures:**
+
+```typescript
+// Fetch actions - retrieve data before rendering
+export async function myFetch(session: FlowSession, api: EnhancedPluginApi) {
+  const { querySheetHistory } = api.hooks;
+  return { variableName: value };
+}
+
+// BeforeRender actions - modify step before display
+export async function myBeforeRender(step: FlowStep, session: FlowSession, api: EnhancedPluginApi) {
+  const { generateButtonRange } = api.hooks;
+  return { ...step, buttons: [...] };
+}
+
+// AfterCapture actions - side effects after capturing input
+export async function myAfterCapture(variable: string, value: string | number, session: FlowSession, api: EnhancedPluginApi) {
+  const { appendToSheet } = api.hooks;
+  await appendToSheet('spreadsheet-id', { [variable]: value });
+}
+```
+
+**Complete Example:**
 
 ```javascript
 // ~/.clawdbot/flows/pushups/hooks.js
