@@ -427,6 +427,20 @@ export async function myAfterCapture(variable: string, value: string | number, s
   const { appendToSheet } = api.hooks;
   await appendToSheet('spreadsheet-id', { [variable]: value });
 }
+
+// Create a new spreadsheet (typically in a fetch action)
+export async function createWorkoutLog(session, api) {
+  const { createSpreadsheet } = api.hooks;
+
+  const { spreadsheetId, spreadsheetUrl } = await createSpreadsheet({
+    title: `${session.flowName} Log - ${new Date().getFullYear()}`,
+    worksheetName: 'Sessions',
+    headers: ['timestamp', 'userId', 'set1', 'set2', 'set3', 'set4', 'total'],
+    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID // Optional: move to specific folder
+  });
+
+  return { spreadsheetId, spreadsheetUrl };
+}
 ```
 
 **Complete Example:**

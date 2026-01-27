@@ -31,7 +31,7 @@ export {
 } from "./common.js";
 
 // Re-export Google Sheets utilities
-export { createSheetsLogger, appendToSheet, querySheetHistory } from "./google-sheets.js";
+export { createSheetsLogger, appendToSheet, querySheetHistory, createSpreadsheet } from "./google-sheets.js";
 
 // Re-export dynamic buttons utilities
 export { createDynamicButtons, getRecentAverage, generateButtonRange } from "./dynamic-buttons.js";

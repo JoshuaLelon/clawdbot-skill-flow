@@ -285,6 +285,155 @@ export async function querySheetHistory(
 }
 
 /**
+ * Create a new Google Spreadsheet with optional initial data
+ *
+ * @param options - Configuration for spreadsheet creation
+ * @returns Object containing spreadsheetId and spreadsheetUrl
+ *
+ * @example
+ * ```ts
+ * // Create a simple spreadsheet
+ * const { spreadsheetId, spreadsheetUrl } = await createSpreadsheet({
+ *   title: 'Pushups Log 2026',
+ *   worksheetName: 'Sessions'
+ * });
+ *
+ * // Create with initial headers and move to folder
+ * const result = await createSpreadsheet({
+ *   title: 'Pushups Log 2026',
+ *   worksheetName: 'Sessions',
+ *   headers: ['timestamp', 'userId', 'set1', 'set2', 'set3', 'set4', 'total'],
+ *   folderId: '1ABC...xyz'
+ * });
+ * ```
+ */
+export async function createSpreadsheet(options: {
+  title: string;
+  worksheetName?: string;
+  headers?: string[];
+  folderId?: string;
+  credentials?: GoogleServiceAccountCredentials;
+}): Promise<{ spreadsheetId: string; spreadsheetUrl: string }> {
+  const {
+    title,
+    worksheetName = 'Sheet1',
+    headers,
+    folderId,
+    credentials,
+  } = options;
+
+  const sheets = await createSheetsClient(credentials);
+
+  // Create the spreadsheet
+  const createResponse = await sheets.spreadsheets.create({
+    requestBody: {
+      properties: {
+        title,
+        locale: 'en_US',
+        timeZone: 'America/Chicago', // Default to CT, users can change
+      },
+      sheets: [
+        {
+          properties: {
+            title: worksheetName,
+            gridProperties: {
+              rowCount: 1000,
+              columnCount: 26,
+              frozenRowCount: headers ? 1 : 0, // Freeze header row if headers provided
+            },
+          },
+        },
+      ],
+    },
+  });
+
+  const spreadsheetId = createResponse.data.spreadsheetId;
+  const spreadsheetUrl = createResponse.data.spreadsheetUrl;
+
+  if (!spreadsheetId || !spreadsheetUrl) {
+    throw new Error('Failed to create spreadsheet: missing ID or URL');
+  }
+
+  // Add headers if provided
+  if (headers && headers.length > 0) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${worksheetName}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [headers],
+      },
+    });
+
+    // Bold the header row
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            repeatCell: {
+              range: {
+                sheetId: 0,
+                startRowIndex: 0,
+                endRowIndex: 1,
+              },
+              cell: {
+                userEnteredFormat: {
+                  textFormat: {
+                    bold: true,
+                  },
+                },
+              },
+              fields: 'userEnteredFormat.textFormat.bold',
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  // Move to folder if specified
+  if (folderId) {
+    // Create Drive API client with same auth
+    let driveAuth;
+    if (credentials) {
+      driveAuth = new google.auth.GoogleAuth({
+        credentials: {
+          client_email: credentials.clientEmail,
+          private_key: credentials.privateKey,
+        },
+        scopes: ['https://www.googleapis.com/auth/drive.file'],
+      });
+    } else {
+      driveAuth = new google.auth.GoogleAuth({
+        scopes: ['https://www.googleapis.com/auth/drive.file'],
+      });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const drive = google.drive({ version: 'v3', auth: driveAuth as any });
+
+    // Get current parents (usually root)
+    const file = await drive.files.get({
+      fileId: spreadsheetId,
+      fields: 'parents',
+    });
+
+    const previousParents = file.data.parents?.join(',');
+
+    // Move to new folder
+    await drive.files.update({
+      fileId: spreadsheetId,
+      addParents: folderId,
+      removeParents: previousParents,
+      fields: 'id, parents',
+    });
+  }
+
+  return { spreadsheetId, spreadsheetUrl };
+}
+
+/**
  * Ensure a worksheet exists, create it if not
  */
 async function ensureWorksheetExists(
