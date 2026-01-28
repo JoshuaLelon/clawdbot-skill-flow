@@ -1,0 +1,82 @@
+{
+  "name": "survey-declarative",
+  "description": "Customer satisfaction survey with declarative actions",
+  "version": "2.0.0",
+  "env": {
+    "SPREADSHEET_ID": "GOOGLE_SPREADSHEET_ID"
+  },
+  "steps": [
+    {
+      "id": "rating",
+      "message": "How would you rate our service?",
+      "buttons": [
+        { "text": "⭐ Poor", "value": 1 },
+        { "text": "⭐⭐ Fair", "value": 2 },
+        { "text": "⭐⭐⭐ Good", "value": 3 },
+        { "text": "⭐⭐⭐⭐ Great", "value": 4 },
+        { "text": "⭐⭐⭐⭐⭐ Excellent", "value": 5 }
+      ],
+      "capture": "rating",
+      "validate": "number",
+      "actions": {
+        "afterCapture": [
+          {
+            "type": "sheets.append",
+            "config": {
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Responses",
+              "columns": ["rating"],
+              "includeMetadata": true,
+              "headerMode": "append"
+            }
+          }
+        ]
+      },
+      "condition": {
+        "variable": "rating",
+        "lessThan": 4,
+        "next": "feedback"
+      },
+      "next": "thanks-high"
+    },
+    {
+      "id": "feedback",
+      "message": "We're sorry to hear that. What could we improve?",
+      "capture": "feedback",
+      "actions": {
+        "afterCapture": [
+          {
+            "type": "sheets.append",
+            "config": {
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Responses",
+              "columns": ["rating", "feedback"],
+              "includeMetadata": true,
+              "headerMode": "append"
+            }
+          },
+          {
+            "type": "notify.telegram",
+            "config": {
+              "text": "🚨 Low rating alert!\n\nRating: {{variables.rating}}/5\nFeedback: {{variables.feedback}}\nUser: {{session.senderId}}"
+            },
+            "if": {
+              "variable": "rating",
+              "operator": "lessThan",
+              "value": 3
+            }
+          }
+        ]
+      },
+      "next": "thanks-low"
+    },
+    {
+      "id": "thanks-high",
+      "message": "🎉 Thank you for the great feedback! We're glad you're happy with our service."
+    },
+    {
+      "id": "thanks-low",
+      "message": "Thank you for your honest feedback. We're committed to improving."
+    }
+  ]
+}

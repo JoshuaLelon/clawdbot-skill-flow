@@ -29,17 +29,54 @@ const ConditionSchema = z.object({
   next: z.string(),
 });
 
-// Conditional action schema
-const ConditionalActionSchema = z.object({
-  action: z.string().describe("Action function name"),
-  if: z.string().optional().describe("Optional: Variable name to check (truthy = execute). Omit for always execute."),
+// Comparison operator enum
+const ComparisonOperatorSchema = z.enum([
+  "equals",
+  "eq",
+  "notEquals",
+  "ne",
+  "greaterThan",
+  "gt",
+  "greaterThanOrEqual",
+  "gte",
+  "lessThan",
+  "lt",
+  "lessThanOrEqual",
+  "lte",
+  "contains",
+  "startsWith",
+  "endsWith",
+  "matches",
+  "in",
+  "exists",
+]);
+
+// Conditional expression schema (recursive for logical combinators)
+const ConditionalExpressionSchema: z.ZodSchema = z.lazy(() =>
+  z.object({
+    // Simple condition
+    variable: z.string().optional(),
+    operator: ComparisonOperatorSchema.optional(),
+    value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+    // Logical combinators
+    and: z.array(ConditionalExpressionSchema).optional(),
+    or: z.array(ConditionalExpressionSchema).optional(),
+    not: ConditionalExpressionSchema.optional(),
+  })
+);
+
+// Declarative action schema
+const DeclarativeActionSchema = z.object({
+  type: z.string().describe("Action type (e.g., sheets.append)"),
+  config: z.record(z.unknown()).describe("Action configuration"),
+  if: ConditionalExpressionSchema.optional(),
 });
 
 // Step actions schema
 const StepActionsSchema = z.object({
-  fetch: z.record(ConditionalActionSchema).optional(),
-  beforeRender: z.array(ConditionalActionSchema).optional(),
-  afterCapture: z.array(ConditionalActionSchema).optional(),
+  fetch: z.record(DeclarativeActionSchema).optional(),
+  beforeRender: z.array(DeclarativeActionSchema).optional(),
+  afterCapture: z.array(DeclarativeActionSchema).optional(),
 }).optional();
 
 // Flow step schema
@@ -80,11 +117,16 @@ export const FlowMetadataSchema = z.object({
   author: z.string().optional(),
   steps: z.array(FlowStepSchema).min(1),
   triggers: TriggerSchema,
-  hooks: z.string().optional(),
+  hooks: z.string().optional().describe("DEPRECATED: Path to hooks file (use declarative actions instead)"),
   env: z
     .record(z.string(), z.string())
     .optional()
     .describe("Environment variables to inject into session"),
+  actions: z
+    .object({
+      imports: z.array(z.string()).optional().describe("Custom action packages to import"),
+    })
+    .optional(),
   storage: StorageSchema,
 }).passthrough();
 

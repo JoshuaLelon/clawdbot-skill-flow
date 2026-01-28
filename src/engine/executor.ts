@@ -13,11 +13,16 @@ import type {
   FetchAction,
   BeforeRenderAction,
   EnhancedPluginApi,
+  DeclarativeAction,
 } from "../types.js";
 import { renderStep } from "./renderer.js";
 import { executeTransition } from "./transitions.js";
 import { loadHooks, resolveFlowPath, safeExecuteHook, safeExecuteAction, validateFlowActions } from "./hooks-loader.js";
 import * as pluginHooks from "../hooks/index.js";
+import { loadActionRegistry, type ActionRegistry } from "./action-loader.js";
+import { evaluateCondition } from "./condition-evaluator.js";
+import { executeDeclarativeAction } from "./action-executor.js";
+import { createInterpolationContext, interpolateConfig } from "./interpolation.js";
 
 /**
  * Determine if an action should execute based on conditional logic
@@ -39,61 +44,60 @@ export function shouldExecuteAction(
 
 /**
  * Execute step-level actions (fetch, beforeRender)
+ * Supports both declarative actions (new) and hooks (legacy)
  */
 async function executeStepActions(
   api: ClawdbotPluginApi,
   step: FlowStep,
   session: FlowSession,
-  hooks: LoadedHooks | null
+  flow: FlowMetadata,
+  hooks: LoadedHooks | null,
+  actionRegistry: ActionRegistry | null
 ): Promise<{ step: FlowStep; session: FlowSession }> {
-  if (!hooks || !step.actions) {
+  if (!step.actions) {
     return { step, session };
   }
-
-  // Create enhanced API with plugin utilities
-  const enhancedApi: EnhancedPluginApi = {
-    ...api,
-    hooks: pluginHooks,
-  };
 
   let modifiedStep = step;
   let modifiedSession = { ...session };
 
-  // 1. Execute fetch actions - inject variables into session
-  if (step.actions.fetch) {
-    for (const [varName, action] of Object.entries(step.actions.fetch)) {
-      // Check if action should execute
-      const { execute, actionName } = shouldExecuteAction(action, modifiedSession);
+  // Check if actions are declarative (new) or legacy hooks
+  const firstAction =
+    step.actions.fetch && Object.values(step.actions.fetch)[0] ||
+    step.actions.beforeRender?.[0];
 
-      if (!execute) {
-        api.logger.debug(
-          `Skipping fetch action "${actionName}" for variable "${varName}" - condition not met`
-        );
-        continue;
-      }
+  const isDeclarative = firstAction && "type" in firstAction;
 
-      const fetchFn = hooks.actions[actionName] as FetchAction | undefined;
-      if (fetchFn) {
-        // Validate signature before calling
-        if (fetchFn.length > 2) {
-          api.logger.error(
-            `Fetch action "${actionName}" has invalid signature. Expected 1-2 parameters (session, api?), got ${fetchFn.length}`
-          );
+  if (isDeclarative && actionRegistry) {
+    // NEW: Declarative action system
+    const context = createInterpolationContext(modifiedSession, flow.env || {});
+
+    // 1. Execute fetch actions
+    if (step.actions.fetch) {
+      for (const [varName, action] of Object.entries(step.actions.fetch)) {
+        const declarativeAction = action as DeclarativeAction;
+
+        // Evaluate condition
+        if (declarativeAction.if && !evaluateCondition(declarativeAction.if, modifiedSession)) {
+          api.logger.debug(`Skipping fetch action ${declarativeAction.type} - condition not met`);
           continue;
         }
 
-        const result = await safeExecuteAction(
-          api,
-          actionName,
-          fetchFn,
-          modifiedSession,
-          enhancedApi  // Pass enhanced API with hooks
-        );
-        if (result && typeof result === "object") {
-          // Only inject the requested variable, not all keys
-          if (varName in result) {
-            const value = result[varName];
-            // Validate that the value is a string or number
+        // Interpolate config
+        const config = interpolateConfig(declarativeAction.config, context);
+
+        try {
+          // Execute action
+          const result = await executeDeclarativeAction(
+            declarativeAction.type,
+            config,
+            { session: modifiedSession, api, step: modifiedStep },
+            actionRegistry
+          );
+
+          // Inject result into session
+          if (result && typeof result === "object" && varName in result) {
+            const value = (result as Record<string, unknown>)[varName];
             if (typeof value === "string" || typeof value === "number") {
               modifiedSession = {
                 ...modifiedSession,
@@ -102,57 +106,146 @@ async function executeStepActions(
                   [varName]: value,
                 },
               };
-            } else {
-              api.logger.warn(
-                `Fetch action "${actionName}" returned invalid type for "${varName}". ` +
-                `Expected string or number, got ${typeof value}`
-              );
+              // Update context for next actions
+              context.variables = modifiedSession.variables;
             }
-          } else {
-            // Warn if action didn't return the expected variable
-            api.logger.warn(
-              `Fetch action "${actionName}" did not return variable "${varName}". ` +
-              `Returned keys: ${Object.keys(result).join(', ')}`
-            );
           }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          api.logger.error(`Fetch action ${declarativeAction.type} failed: ${errorMsg}`);
+          // Continue with other actions
         }
       }
     }
-  }
 
-  // 2. Execute beforeRender actions - modify step
-  if (step.actions.beforeRender) {
-    for (const action of step.actions.beforeRender) {
-      // Check if action should execute
-      const { execute, actionName } = shouldExecuteAction(action, modifiedSession);
+    // 2. Execute beforeRender actions
+    if (step.actions.beforeRender) {
+      for (const action of step.actions.beforeRender) {
+        const declarativeAction = action as DeclarativeAction;
 
-      if (!execute) {
-        api.logger.debug(
-          `Skipping beforeRender action "${actionName}" - condition not met`
-        );
-        continue;
+        // Evaluate condition
+        if (declarativeAction.if && !evaluateCondition(declarativeAction.if, modifiedSession)) {
+          api.logger.debug(`Skipping beforeRender action ${declarativeAction.type} - condition not met`);
+          continue;
+        }
+
+        // Interpolate config
+        const config = interpolateConfig(declarativeAction.config, context);
+
+        try {
+          // Execute action
+          const result = await executeDeclarativeAction(
+            declarativeAction.type,
+            config,
+            { session: modifiedSession, api, step: modifiedStep },
+            actionRegistry
+          );
+
+          if (result && typeof result === "object") {
+            modifiedStep = result as FlowStep;
+          }
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          api.logger.error(`BeforeRender action ${declarativeAction.type} failed: ${errorMsg}`);
+          // Continue with other actions
+        }
       }
+    }
+  } else if (hooks) {
+    // LEGACY: Hook-based action system
+    const enhancedApi: EnhancedPluginApi = {
+      ...api,
+      hooks: pluginHooks,
+    };
 
-      const beforeRenderFn = hooks.actions[actionName] as BeforeRenderAction | undefined;
-      if (beforeRenderFn) {
-        // Validate signature before calling
-        if (beforeRenderFn.length > 3) {
-          api.logger.error(
-            `BeforeRender action "${actionName}" has invalid signature. Expected 2-3 parameters (step, session, api?), got ${beforeRenderFn.length}`
+    // 1. Execute fetch actions - inject variables into session
+    if (step.actions.fetch) {
+      for (const [varName, action] of Object.entries(step.actions.fetch)) {
+        // Check if it's a legacy action (has "action" field instead of "type")
+        if (!("action" in action)) continue;
+
+        const legacyAction = action as unknown as ConditionalAction;
+        // Check if action should execute
+        const { execute, actionName} = shouldExecuteAction(legacyAction, modifiedSession);
+
+        if (!execute) {
+          api.logger.debug(
+            `Skipping fetch action "${actionName}" for variable "${varName}" - condition not met`
           );
           continue;
         }
 
-        const result = await safeExecuteAction(
-          api,
-          actionName,
-          beforeRenderFn,
-          modifiedStep,
-          modifiedSession,
-          enhancedApi  // Pass enhanced API with hooks
-        );
-        if (result) {
-          modifiedStep = result as FlowStep;
+        const fetchFn = hooks.actions[actionName] as FetchAction | undefined;
+        if (fetchFn) {
+          // Validate signature before calling
+          if (fetchFn.length > 2) {
+            api.logger.error(
+              `Fetch action "${actionName}" has invalid signature. Expected 1-2 parameters (session, api?), got ${fetchFn.length}`
+            );
+            continue;
+          }
+
+          const result = await safeExecuteAction(
+            api,
+            actionName,
+            fetchFn,
+            modifiedSession,
+            enhancedApi
+          );
+          if (result && typeof result === "object") {
+            if (varName in result) {
+              const value = result[varName];
+              if (typeof value === "string" || typeof value === "number") {
+                modifiedSession = {
+                  ...modifiedSession,
+                  variables: {
+                    ...modifiedSession.variables,
+                    [varName]: value,
+                  },
+                };
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Execute beforeRender actions - modify step
+    if (step.actions.beforeRender) {
+      for (const action of step.actions.beforeRender) {
+        // Check if it's a legacy action (has "action" field instead of "type")
+        if (!("action" in action)) continue;
+
+        const legacyAction = action as unknown as ConditionalAction;
+        const { execute, actionName } = shouldExecuteAction(legacyAction, modifiedSession);
+
+        if (!execute) {
+          api.logger.debug(
+            `Skipping beforeRender action "${actionName}" - condition not met`
+          );
+          continue;
+        }
+
+        const beforeRenderFn = hooks.actions[actionName] as BeforeRenderAction | undefined;
+        if (beforeRenderFn) {
+          if (beforeRenderFn.length > 3) {
+            api.logger.error(
+              `BeforeRender action "${actionName}" has invalid signature. Expected 2-3 parameters (step, session, api?), got ${beforeRenderFn.length}`
+            );
+            continue;
+          }
+
+          const result = await safeExecuteAction(
+            api,
+            actionName,
+            beforeRenderFn,
+            modifiedStep,
+            modifiedSession,
+            enhancedApi
+          );
+          if (result) {
+            modifiedStep = result as FlowStep;
+          }
         }
       }
     }
@@ -177,7 +270,19 @@ export async function startFlow(
     };
   }
 
-  // Load hooks if configured
+  // Load action registry for declarative actions
+  let actionRegistry: ActionRegistry | null = null;
+  if (flow.actions?.imports || !flow.hooks) {
+    try {
+      actionRegistry = await loadActionRegistry(flow.actions?.imports);
+      api.logger.debug(`Loaded action registry with ${actionRegistry.list().length} actions`);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      api.logger.error(`Failed to load action registry: ${errorMsg}`);
+    }
+  }
+
+  // Load hooks if configured (legacy support)
   let hooks: LoadedHooks | null = null;
   if (flow.hooks) {
     const hooksPath = resolveFlowPath(api, flow.name, flow.hooks);
@@ -215,7 +320,7 @@ export async function startFlow(
   }
 
   // Execute step actions before rendering
-  const actionResult = await executeStepActions(api, firstStep, session, hooks);
+  const actionResult = await executeStepActions(api, firstStep, session, flow, hooks, actionRegistry);
   firstStep = actionResult.step;
   session = actionResult.session;
 
@@ -236,7 +341,18 @@ export async function processStep(
   complete: boolean;
   updatedVariables: Record<string, string | number>;
 }> {
-  // Load hooks if configured
+  // Load action registry for declarative actions
+  let actionRegistry: ActionRegistry | null = null;
+  if (flow.actions?.imports || !flow.hooks) {
+    try {
+      actionRegistry = await loadActionRegistry(flow.actions?.imports);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      api.logger.error(`Failed to load action registry: ${errorMsg}`);
+    }
+  }
+
+  // Load hooks if configured (legacy support)
   let hooks: LoadedHooks | null = null;
   if (flow.hooks) {
     const hooksPath = resolveFlowPath(api, flow.name, flow.hooks);
@@ -254,7 +370,8 @@ export async function processStep(
     session,
     stepId,
     value,
-    hooks
+    hooks,
+    actionRegistry
   );
 
   // Handle errors
@@ -304,7 +421,7 @@ export async function processStep(
   let updatedSession = { ...session, variables: result.variables };
 
   // Execute step actions before rendering
-  const actionResult = await executeStepActions(api, nextStep, updatedSession, hooks);
+  const actionResult = await executeStepActions(api, nextStep, updatedSession, flow, hooks, actionRegistry);
   nextStep = actionResult.step;
   updatedSession = actionResult.session;
 

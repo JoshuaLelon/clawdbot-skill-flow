@@ -436,7 +436,8 @@ export async function createWorkoutLog(session, api) {
     title: `${session.flowName} Log - ${new Date().getFullYear()}`,
     worksheetName: 'Sessions',
     headers: ['timestamp', 'userId', 'set1', 'set2', 'set3', 'set4', 'total'],
-    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID // Optional: move to specific folder
+    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID, // Optional: move to specific folder
+    useGogOAuth: true // Use gog CLI OAuth to avoid service account quota issues (requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars)
   });
 
   return { spreadsheetId, spreadsheetUrl };

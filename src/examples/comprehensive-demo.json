@@ -1,0 +1,202 @@
+{
+  "name": "comprehensive-demo",
+  "description": "Demonstrates all declarative action types",
+  "version": "1.0.0",
+  "env": {
+    "SPREADSHEET_ID": "GOOGLE_SPREADSHEET_ID",
+    "API_KEY": "MY_API_KEY",
+    "WEBHOOK_URL": "MY_WEBHOOK_URL"
+  },
+  "steps": [
+    {
+      "id": "name",
+      "message": "What's your name?",
+      "capture": "name",
+      "next": "score"
+    },
+    {
+      "id": "score",
+      "message": "Hi {{variables.name}}! Enter your score (0-100):",
+      "capture": "score",
+      "validate": "number",
+      "actions": {
+        "fetch": {
+          "averageScore": {
+            "type": "sheets.query",
+            "config": {
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Scores",
+              "filters": {
+                "flowName": "comprehensive-demo"
+              }
+            },
+            "if": {
+              "variable": "SPREADSHEET_ID",
+              "operator": "exists"
+            }
+          }
+        },
+        "beforeRender": [
+          {
+            "type": "buttons.generateRange",
+            "config": {
+              "variable": "score",
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Scores",
+              "strategy": "centered",
+              "buttonCount": 5,
+              "step": 10,
+              "minValue": 0
+            },
+            "if": {
+              "variable": "SPREADSHEET_ID",
+              "operator": "exists"
+            }
+          }
+        ],
+        "afterCapture": [
+          {
+            "type": "sheets.append",
+            "config": {
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Scores",
+              "columns": ["name", "score"],
+              "includeMetadata": true,
+              "headerMode": "append"
+            },
+            "if": {
+              "variable": "SPREADSHEET_ID",
+              "operator": "exists"
+            }
+          },
+          {
+            "type": "data.transform",
+            "config": {
+              "operation": "sum",
+              "inputs": ["{{variables.score}}", 10]
+            }
+          }
+        ]
+      },
+      "condition": {
+        "variable": "score",
+        "greaterThan": 80,
+        "next": "excellent"
+      },
+      "next": "good"
+    },
+    {
+      "id": "excellent",
+      "message": "🎉 Excellent score, {{variables.name}}! You got {{variables.score}}/100!",
+      "actions": {
+        "beforeRender": [
+          {
+            "type": "notify.telegram",
+            "config": {
+              "text": "🏆 High score alert!\n\nUser: {{variables.name}}\nScore: {{variables.score}}/100"
+            },
+            "if": {
+              "variable": "score",
+              "operator": "greaterThanOrEqual",
+              "value": 90
+            }
+          },
+          {
+            "type": "http.request",
+            "config": {
+              "url": "{{env.WEBHOOK_URL}}",
+              "method": "POST",
+              "headers": {
+                "Authorization": "Bearer {{env.API_KEY}}",
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "event": "high_score",
+                "user": "{{variables.name}}",
+                "score": "{{variables.score}}",
+                "timestamp": "{{timestamp.now}}"
+              },
+              "timeout": 5000,
+              "retries": 2
+            },
+            "if": {
+              "and": [
+                {
+                  "variable": "WEBHOOK_URL",
+                  "operator": "exists"
+                },
+                {
+                  "variable": "score",
+                  "operator": "greaterThan",
+                  "value": 85
+                }
+              ]
+            }
+          },
+          {
+            "type": "schedule.oneTime",
+            "config": {
+              "date": "{{timestamp.hoursAgo(-24)}}",
+              "message": "Time for your next challenge!",
+              "channel": "telegram",
+              "to": "{{session.senderId}}",
+              "name": "challenge-reminder"
+            }
+          }
+        ]
+      },
+      "next": "thanks"
+    },
+    {
+      "id": "good",
+      "message": "Good job, {{variables.name}}! You scored {{variables.score}}/100.",
+      "actions": {
+        "beforeRender": [
+          {
+            "type": "notify.telegram",
+            "config": {
+              "text": "📊 Keep practicing!\n\nYour score: {{variables.score}}/100\nAverage: {{variables.averageScore}}"
+            },
+            "if": {
+              "variable": "score",
+              "operator": "lessThan",
+              "value": 50
+            }
+          }
+        ]
+      },
+      "next": "thanks"
+    },
+    {
+      "id": "thanks",
+      "message": "Thanks for participating! Want to take another quiz?",
+      "buttons": [
+        {"text": "Yes, let's go!", "value": "yes", "next": "name"},
+        {"text": "No, I'm done", "value": "no"}
+      ],
+      "capture": "again",
+      "actions": {
+        "beforeRender": [
+          {
+            "type": "schedule.cron",
+            "config": {
+              "schedule": "0 9 * * 1,3,5",
+              "timezone": "America/Los_Angeles",
+              "message": "📝 Time for your weekly quiz!",
+              "channel": "telegram",
+              "to": "{{session.senderId}}",
+              "name": "weekly-quiz-reminder",
+              "sessionType": "isolated",
+              "deleteAfterRun": false
+            },
+            "if": {
+              "variable": "again",
+              "operator": "equals",
+              "value": "yes"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

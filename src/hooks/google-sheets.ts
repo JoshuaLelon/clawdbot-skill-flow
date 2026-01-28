@@ -3,9 +3,13 @@
  */
 
 import { google, sheets_v4 } from "googleapis";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import type { FlowHooks, FlowSession } from "../types.js";
 import type { SheetsLogOptions, GoogleServiceAccountCredentials, HeaderMode } from "./types.js";
 import { withRetry } from "./common.js";
+
+const execAsync = promisify(exec);
 
 /**
  * Create a Google Sheets API client with authentication
@@ -285,6 +289,191 @@ export async function querySheetHistory(
 }
 
 /**
+ * Get OAuth access token from gog CLI
+ * Uses the gog tool's stored refresh token to get a fresh access token
+ */
+async function getGogAccessToken(): Promise<string> {
+  try {
+    // Check if gog is installed
+    await execAsync('which gog');
+
+    // Export refresh token from gog
+    const { stdout: refreshToken } = await execAsync('gog auth tokens export --refresh');
+    if (!refreshToken || !refreshToken.trim()) {
+      throw new Error('No refresh token available from gog');
+    }
+
+    // Get OAuth credentials from environment
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+    if (!clientId || !clientSecret) {
+      throw new Error(
+        'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables must be set to use gog OAuth'
+      );
+    }
+
+    // Exchange refresh token for access token
+    const tokenUrl = 'https://oauth2.googleapis.com/token';
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken.trim(),
+        grant_type: 'refresh_token',
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OAuth token exchange failed: ${response.statusText}`);
+    }
+
+    const data = await response.json() as { access_token: string };
+    return data.access_token;
+  } catch (error) {
+    throw new Error(
+      `Failed to get OAuth access token from gog: ${error instanceof Error ? error.message : String(error)}. ` +
+      `Ensure gog CLI is installed and authenticated.`
+    );
+  }
+}
+
+/**
+ * Create spreadsheet using gog OAuth credentials (bypasses service account quota issue)
+ */
+async function createSpreadsheetWithGogOAuth(options: {
+  title: string;
+  worksheetName: string;
+  headers?: string[];
+  folderId?: string;
+}): Promise<{ spreadsheetId: string; spreadsheetUrl: string }> {
+  const { title, worksheetName, headers, folderId } = options;
+
+  const accessToken = await getGogAccessToken();
+
+  // Create spreadsheet via Sheets API
+  const createUrl = 'https://sheets.googleapis.com/v4/spreadsheets';
+  const createResponse = await fetch(createUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      properties: {
+        title,
+        locale: 'en_US',
+        timeZone: 'America/Chicago',
+      },
+      sheets: [{
+        properties: {
+          title: worksheetName,
+          gridProperties: {
+            rowCount: 1000,
+            columnCount: 26,
+            frozenRowCount: headers ? 1 : 0,
+          },
+        },
+      }],
+    }),
+  });
+
+  if (!createResponse.ok) {
+    const errorText = await createResponse.text();
+    throw new Error(`Failed to create spreadsheet: ${createResponse.statusText} - ${errorText}`);
+  }
+
+  const createData = await createResponse.json() as {
+    spreadsheetId: string;
+    spreadsheetUrl: string;
+  };
+
+  const { spreadsheetId, spreadsheetUrl } = createData;
+
+  if (!spreadsheetId || !spreadsheetUrl) {
+    throw new Error('Failed to create spreadsheet: missing ID or URL');
+  }
+
+  // Add headers if provided
+  if (headers && headers.length > 0) {
+    // Write headers
+    const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${worksheetName}!A1:append?valueInputOption=RAW`;
+    await fetch(updateUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        values: [headers],
+      }),
+    });
+
+    // Bold headers
+    const batchUpdateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+    await fetch(batchUpdateUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        requests: [{
+          repeatCell: {
+            range: {
+              sheetId: 0,
+              startRowIndex: 0,
+              endRowIndex: 1,
+            },
+            cell: {
+              userEnteredFormat: {
+                textFormat: {
+                  bold: true,
+                },
+              },
+            },
+            fields: 'userEnteredFormat.textFormat.bold',
+          },
+        }],
+      }),
+    });
+  }
+
+  // Move to folder if specified
+  if (folderId) {
+    // Get current parents
+    const getUrl = `https://www.googleapis.com/drive/v3/files/${spreadsheetId}?fields=parents`;
+    const getResponse = await fetch(getUrl, {
+      headers: { 'Authorization': `Bearer ${accessToken}` },
+    });
+
+    if (getResponse.ok) {
+      const getData = await getResponse.json() as { parents?: string[] };
+      const previousParents = getData.parents?.join(',');
+
+      // Move to new folder
+      const moveUrl = `https://www.googleapis.com/drive/v3/files/${spreadsheetId}?${new URLSearchParams({
+        addParents: folderId,
+        ...(previousParents && { removeParents: previousParents }),
+        fields: 'id,parents',
+      })}`;
+
+      await fetch(moveUrl, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+    }
+  }
+
+  return { spreadsheetId, spreadsheetUrl };
+}
+
+/**
  * Create a new Google Spreadsheet with optional initial data
  *
  * @param options - Configuration for spreadsheet creation
@@ -305,6 +494,14 @@ export async function querySheetHistory(
  *   headers: ['timestamp', 'userId', 'set1', 'set2', 'set3', 'set4', 'total'],
  *   folderId: '1ABC...xyz'
  * });
+ *
+ * // Use gog OAuth to bypass service account quota issues
+ * const result = await createSpreadsheet({
+ *   title: 'Pushups Log 2026',
+ *   worksheetName: 'Sessions',
+ *   useGogOAuth: true, // Uses your OAuth credentials instead of service account
+ *   folderId: '1ABC...xyz'
+ * });
  * ```
  */
 export async function createSpreadsheet(options: {
@@ -313,6 +510,7 @@ export async function createSpreadsheet(options: {
   headers?: string[];
   folderId?: string;
   credentials?: GoogleServiceAccountCredentials;
+  useGogOAuth?: boolean;
 }): Promise<{ spreadsheetId: string; spreadsheetUrl: string }> {
   const {
     title,
@@ -320,7 +518,18 @@ export async function createSpreadsheet(options: {
     headers,
     folderId,
     credentials,
+    useGogOAuth = false,
   } = options;
+
+  // Use gog OAuth if requested (bypasses service account quota issues)
+  if (useGogOAuth) {
+    return await createSpreadsheetWithGogOAuth({
+      title,
+      worksheetName,
+      headers,
+      folderId,
+    });
+  }
 
   const sheets = await createSheetsClient(credentials);
 

@@ -11,6 +11,8 @@ import type {
   LoadedHooks,
   AfterCaptureAction,
   EnhancedPluginApi,
+  DeclarativeAction,
+  ConditionalAction,
 } from "../types.js";
 import { normalizeButton, validateInput } from "../validation.js";
 import { safeExecuteAction } from "./hooks-loader.js";
@@ -18,6 +20,10 @@ import { sanitizeInput } from "../security/input-sanitization.js";
 import { getPluginConfig } from "../config.js";
 import { shouldExecuteAction } from "./executor.js";
 import * as pluginHooks from "../hooks/index.js";
+import type { ActionRegistry } from "./action-loader.js";
+import { evaluateCondition as evaluateDeclarativeCondition } from "./condition-evaluator.js";
+import { executeDeclarativeAction } from "./action-executor.js";
+import { createInterpolationContext, interpolateConfig } from "./interpolation.js";
 
 /**
  * Evaluate condition against session variables
@@ -100,7 +106,8 @@ export async function executeTransition(
   session: FlowSession,
   stepId: string,
   value: string | number,
-  hooks?: LoadedHooks | null
+  hooks?: LoadedHooks | null,
+  actionRegistry?: ActionRegistry | null
 ): Promise<TransitionResult> {
   // Create enhanced API with plugin utilities
   const enhancedApi: EnhancedPluginApi = {
@@ -162,38 +169,84 @@ export async function executeTransition(
     updatedVariables[step.capture] = capturedValue;
 
     // Execute afterCapture actions
-    if (step.actions?.afterCapture && hooks) {
+    if (step.actions?.afterCapture) {
       const updatedSession = { ...session, variables: updatedVariables };
-      for (const action of step.actions.afterCapture) {
-        // Check if action should execute
-        const { execute, actionName } = shouldExecuteAction(action, updatedSession);
 
-        if (!execute) {
-          api.logger.debug(
-            `Skipping afterCapture action "${actionName}" - condition not met`
-          );
-          continue;
+      // Check if actions are declarative (new) or legacy hooks
+      const firstAction = step.actions.afterCapture[0];
+      const isDeclarative = firstAction && "type" in firstAction;
+
+      if (isDeclarative && actionRegistry) {
+        // NEW: Declarative action system
+        const context = createInterpolationContext(updatedSession, flow.env || {});
+
+        for (const action of step.actions.afterCapture) {
+          const declarativeAction = action as DeclarativeAction;
+
+          // Evaluate condition
+          if (declarativeAction.if && !evaluateDeclarativeCondition(declarativeAction.if, updatedSession)) {
+            api.logger.debug(`Skipping afterCapture action ${declarativeAction.type} - condition not met`);
+            continue;
+          }
+
+          // Interpolate config
+          const config = interpolateConfig(declarativeAction.config, context);
+
+          try {
+            // Execute action
+            await executeDeclarativeAction(
+              declarativeAction.type,
+              config,
+              {
+                session: updatedSession,
+                api,
+                step,
+                capturedVariable: step.capture,
+                capturedValue: capturedValue,
+              },
+              actionRegistry
+            );
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            api.logger.error(`AfterCapture action ${declarativeAction.type} failed: ${errorMsg}`);
+            // Continue with other actions
+          }
         }
+      } else if (hooks) {
+        // LEGACY: Hook-based action system
+        for (const action of step.actions.afterCapture) {
+          // Check if it's a legacy action (has "action" field instead of "type")
+          if (!("action" in action)) continue;
 
-        const afterCaptureFn = hooks.actions[actionName] as AfterCaptureAction | undefined;
-        if (afterCaptureFn) {
-          // Validate signature before calling
-          if (afterCaptureFn.length > 4) {
-            api.logger.error(
-              `AfterCapture action "${actionName}" has invalid signature. Expected 3-4 parameters (variable, value, session, api?), got ${afterCaptureFn.length}`
+          const legacyAction = action as unknown as ConditionalAction;
+          const { execute, actionName } = shouldExecuteAction(legacyAction, updatedSession);
+
+          if (!execute) {
+            api.logger.debug(
+              `Skipping afterCapture action "${actionName}" - condition not met`
             );
             continue;
           }
 
-          await safeExecuteAction(
-            api,
-            actionName,
-            afterCaptureFn,
-            step.capture,
-            capturedValue,
-            updatedSession,
-            enhancedApi  // Pass enhanced API with hooks
-          );
+          const afterCaptureFn = hooks.actions[actionName] as AfterCaptureAction | undefined;
+          if (afterCaptureFn) {
+            if (afterCaptureFn.length > 4) {
+              api.logger.error(
+                `AfterCapture action "${actionName}" has invalid signature. Expected 3-4 parameters (variable, value, session, api?), got ${afterCaptureFn.length}`
+              );
+              continue;
+            }
+
+            await safeExecuteAction(
+              api,
+              actionName,
+              afterCaptureFn,
+              step.capture,
+              capturedValue,
+              updatedSession,
+              enhancedApi
+            );
+          }
         }
       }
     }

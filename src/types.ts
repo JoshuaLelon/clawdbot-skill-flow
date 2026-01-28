@@ -10,6 +10,45 @@ export interface Button {
   next?: string;
 }
 
+export type ComparisonOperator =
+  | "equals"
+  | "eq"
+  | "notEquals"
+  | "ne"
+  | "greaterThan"
+  | "gt"
+  | "greaterThanOrEqual"
+  | "gte"
+  | "lessThan"
+  | "lt"
+  | "lessThanOrEqual"
+  | "lte"
+  | "contains"
+  | "startsWith"
+  | "endsWith"
+  | "matches"
+  | "in"
+  | "exists";
+
+export interface ConditionalExpression {
+  // Simple condition
+  variable?: string;
+  operator?: ComparisonOperator;
+  value?: string | number | boolean;
+
+  // Logical combinators
+  and?: ConditionalExpression[];
+  or?: ConditionalExpression[];
+  not?: ConditionalExpression;
+}
+
+export interface DeclarativeAction {
+  type: string; // Action type (e.g., "sheets.append", "notify.telegram")
+  config: Record<string, unknown>; // Action configuration
+  if?: ConditionalExpression; // Optional condition
+}
+
+/** @deprecated Use DeclarativeAction instead */
 export interface ConditionalAction {
   action: string; // Action function name
   if?: string; // Optional: Variable name to check (truthy = execute). Omit for always execute.
@@ -31,9 +70,9 @@ export interface FlowStep {
     next: string;
   };
   actions?: {
-    fetch?: Record<string, ConditionalAction>;
-    beforeRender?: ConditionalAction[];
-    afterCapture?: ConditionalAction[];
+    fetch?: Record<string, DeclarativeAction | ConditionalAction>;
+    beforeRender?: Array<DeclarativeAction | ConditionalAction>;
+    afterCapture?: Array<DeclarativeAction | ConditionalAction>;
   };
 }
 
@@ -48,8 +87,12 @@ export interface FlowMetadata {
     cron?: string;
     event?: string;
   };
+  /** @deprecated Use declarative actions instead of hooks.js */
   hooks?: string; // Path to hooks file (relative to flow directory)
   env?: Record<string, string>; // Environment variable mapping: { sessionVar: "ENV_VAR_NAME" }
+  actions?: {
+    imports?: string[]; // Custom action packages to import
+  };
   storage?: {
     backend?: string; // Path to custom storage backend
     builtin?: boolean; // Also write to JSONL (default: true)

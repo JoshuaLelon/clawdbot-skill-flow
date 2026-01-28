@@ -222,10 +222,20 @@ export async function safeExecuteAction<T, Args extends unknown[]>(
 }
 
 /**
- * Extract action name from ConditionalAction
+ * Extract action name from ConditionalAction or DeclarativeAction
  */
-function getActionName(action: import("../types.js").ConditionalAction): string {
-  return action.action;
+function getActionName(
+  action: import("../types.js").ConditionalAction | import("../types.js").DeclarativeAction
+): string {
+  // Check if it's a legacy ConditionalAction with "action" field
+  if ("action" in action) {
+    return action.action;
+  }
+  // Otherwise it's a DeclarativeAction with "type" field
+  if ("type" in action) {
+    return action.type;
+  }
+  return "unknown";
 }
 
 /**

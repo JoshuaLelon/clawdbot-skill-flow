@@ -1,0 +1,150 @@
+{
+  "name": "pushups-declarative",
+  "description": "4-set pushup workout tracker with declarative actions (Google Sheets logging)",
+  "version": "2.0.0",
+  "env": {
+    "SPREADSHEET_ID": "GOOGLE_SPREADSHEET_ID"
+  },
+  "steps": [
+    {
+      "id": "set1",
+      "message": "Set 1: How many pushups?",
+      "actions": {
+        "beforeRender": [
+          {
+            "type": "buttons.generateRange",
+            "config": {
+              "variable": "set1",
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Workouts",
+              "strategy": "centered",
+              "buttonCount": 5,
+              "step": 5,
+              "recentCount": 10
+            }
+          }
+        ],
+        "afterCapture": [
+          {
+            "type": "sheets.append",
+            "config": {
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Workouts",
+              "columns": ["set1"],
+              "includeMetadata": true,
+              "headerMode": "append"
+            }
+          }
+        ]
+      },
+      "capture": "set1",
+      "validate": "number",
+      "next": "set2"
+    },
+    {
+      "id": "set2",
+      "message": "Great! Set 2?",
+      "actions": {
+        "beforeRender": [
+          {
+            "type": "buttons.generateRange",
+            "config": {
+              "variable": "set2",
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Workouts",
+              "strategy": "centered",
+              "buttonCount": 5,
+              "step": 5
+            }
+          }
+        ],
+        "afterCapture": [
+          {
+            "type": "sheets.append",
+            "config": {
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Workouts",
+              "columns": ["set1", "set2"],
+              "includeMetadata": true,
+              "headerMode": "append"
+            }
+          }
+        ]
+      },
+      "capture": "set2",
+      "validate": "number",
+      "next": "set3"
+    },
+    {
+      "id": "set3",
+      "message": "Nice! Set 3?",
+      "actions": {
+        "beforeRender": [
+          {
+            "type": "buttons.generateRange",
+            "config": {
+              "variable": "set3",
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Workouts",
+              "strategy": "centered",
+              "buttonCount": 5,
+              "step": 5
+            }
+          }
+        ],
+        "afterCapture": [
+          {
+            "type": "sheets.append",
+            "config": {
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Workouts",
+              "columns": ["set1", "set2", "set3"],
+              "includeMetadata": true,
+              "headerMode": "append"
+            }
+          }
+        ]
+      },
+      "capture": "set3",
+      "validate": "number",
+      "next": "set4"
+    },
+    {
+      "id": "set4",
+      "message": "Final set!",
+      "actions": {
+        "beforeRender": [
+          {
+            "type": "buttons.generateRange",
+            "config": {
+              "variable": "set4",
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Workouts",
+              "strategy": "centered",
+              "buttonCount": 5,
+              "step": 5
+            }
+          }
+        ],
+        "afterCapture": [
+          {
+            "type": "sheets.append",
+            "config": {
+              "spreadsheetId": "{{env.SPREADSHEET_ID}}",
+              "worksheetName": "Workouts",
+              "columns": ["set1", "set2", "set3", "set4"],
+              "includeMetadata": true,
+              "headerMode": "append"
+            },
+            "if": {
+              "variable": "set4",
+              "operator": "exists"
+            }
+          }
+        ]
+      },
+      "capture": "set4",
+      "validate": "number"
+    }
+  ]
+}
