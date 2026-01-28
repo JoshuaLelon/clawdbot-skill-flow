@@ -68,6 +68,7 @@ export function createSheetsLogger(
     includeMetadata = true,
     credentials,
     headerMode = 'append',
+    useGogOAuth,
   } = options;
 
   return async (variable: string, value: string | number, session: FlowSession) => {
@@ -99,7 +100,7 @@ export function createSheetsLogger(
 
       // Append to sheet with retry
       await withRetry(
-        () => appendToSheet(spreadsheetId, worksheetName, [row], credentials, headerMode),
+        () => appendToSheet(spreadsheetId, worksheetName, [row], credentials, headerMode, useGogOAuth),
         { maxAttempts: 3, delayMs: 1000, backoff: true }
       );
     } catch (error) {
@@ -112,6 +113,120 @@ export function createSheetsLogger(
       // Don't throw - logging failures shouldn't break the flow
     }
   };
+}
+
+/**
+ * Append rows to Google Sheet using gog OAuth credentials
+ */
+async function appendToSheetWithGogOAuth(
+  spreadsheetId: string,
+  worksheetName: string,
+  rows: Array<Record<string, unknown>>,
+  headerMode: HeaderMode = 'append'
+): Promise<void> {
+  if (rows.length === 0) {
+    return;
+  }
+
+  const accessToken = await getGogAccessToken();
+  const rowKeys = Object.keys(rows[0]!);
+
+  // Get existing data to check headers
+  const getUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${worksheetName}!A1:ZZ1`;
+  const getResponse = await fetch(getUrl, {
+    headers: { 'Authorization': `Bearer ${accessToken}` },
+  });
+
+  let existingHeaders: string[] = [];
+  if (getResponse.ok) {
+    const getData = await getResponse.json() as { values?: string[][] };
+    existingHeaders = getData.values?.[0] || [];
+  }
+
+  // Handle headers based on mode
+  if (existingHeaders.length === 0) {
+    // Empty sheet - write headers
+    const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${worksheetName}!A1?valueInputOption=RAW`;
+    await fetch(updateUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        values: [rowKeys],
+      }),
+    });
+  } else if (!arraysEqual(existingHeaders, rowKeys)) {
+    // Headers don't match - apply mode
+    switch (headerMode) {
+      case 'strict':
+        throw new Error(
+          `Header mismatch in sheet "${worksheetName}". ` +
+          `Expected: ${existingHeaders.join(', ')}. ` +
+          `Got: ${rowKeys.join(', ')}. ` +
+          `Set headerMode to 'append' or 'overwrite' to handle this.`
+        );
+
+      case 'append': {
+        // Find new columns not in existing headers
+        const newColumns = rowKeys.filter(key => !existingHeaders.includes(key));
+        if (newColumns.length > 0) {
+          // Append new columns to the right
+          const updatedHeaders = [...existingHeaders, ...newColumns];
+          const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${worksheetName}!A1?valueInputOption=RAW`;
+          await fetch(updateUrl, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              values: [updatedHeaders],
+            }),
+          });
+        }
+        break;
+      }
+
+      case 'overwrite': {
+        // Replace headers completely
+        const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${worksheetName}!A1?valueInputOption=RAW`;
+        await fetch(updateUrl, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            values: [rowKeys],
+          }),
+        });
+        break;
+      }
+    }
+  }
+
+  // Convert rows to 2D array
+  const values = rows.map((row) => rowKeys.map((key) => row[key] ?? ""));
+
+  // Append data
+  const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${worksheetName}!A:A:append?valueInputOption=RAW`;
+  const appendResponse = await fetch(appendUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      values,
+    }),
+  });
+
+  if (!appendResponse.ok) {
+    const errorText = await appendResponse.text();
+    throw new Error(`Failed to append to sheet: ${appendResponse.statusText} - ${errorText}`);
+  }
 }
 
 /**
@@ -131,10 +246,21 @@ export async function appendToSheet(
   worksheetName: string,
   rows: Array<Record<string, unknown>>,
   credentials?: GoogleServiceAccountCredentials,
-  headerMode: HeaderMode = 'append'
+  headerMode: HeaderMode = 'append',
+  useGogOAuth?: boolean
 ): Promise<void> {
   if (rows.length === 0) {
     return;
+  }
+
+  // Use gog OAuth if requested
+  if (useGogOAuth) {
+    return await appendToSheetWithGogOAuth(
+      spreadsheetId,
+      worksheetName,
+      rows,
+      headerMode
+    );
   }
 
   const sheets = await createSheetsClient(credentials);

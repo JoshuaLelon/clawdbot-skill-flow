@@ -247,7 +247,8 @@ Append rows to a Google Sheet:
     "worksheetName": "Responses",
     "columns": ["timestamp", "userId", "answer"],
     "includeMetadata": true,
-    "headerMode": "append"
+    "headerMode": "append",
+    "useGogOAuth": true
   }
 }
 ```
@@ -262,6 +263,9 @@ Append rows to a Google Sheet:
   - `overwrite` - Replace all headers
   - `strict` - Error if headers don't match
 - `credentials` (object, optional) - Service account credentials
+- `useGogOAuth` (boolean, default: true): Use gog CLI OAuth instead of service account
+  - **Important:** Set to `true` to avoid service account quota issues
+  - Requires same environment variables as sheets.create (GOG_ACCOUNT, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
 
 #### sheets.query
 

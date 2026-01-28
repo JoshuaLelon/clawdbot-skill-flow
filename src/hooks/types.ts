@@ -27,6 +27,7 @@ export interface SheetsLogOptions {
   includeMetadata?: boolean; // Add timestamp, userId, flowName
   credentials?: GoogleServiceAccountCredentials;
   headerMode?: HeaderMode; // How to handle header mismatches (default: 'append')
+  useGogOAuth?: boolean; // Use gog CLI OAuth instead of service account (default: true)
 }
 
 /**

@@ -49,6 +49,9 @@ const sheetsAppendSchema = z.object({
       privateKey: z.string(),
     })
     .optional(),
+  useGogOAuth: z.boolean().default(true).describe(
+    "Use gog CLI OAuth instead of service account (recommended to avoid quota issues)"
+  ),
 });
 
 async function sheetsAppendExecute(
@@ -85,7 +88,8 @@ async function sheetsAppendExecute(
       cfg.worksheetName,
       [row],
       cfg.credentials as GoogleServiceAccountCredentials | undefined,
-      cfg.headerMode
+      cfg.headerMode,
+      cfg.useGogOAuth
     ),
     { maxAttempts: 3, delayMs: 1000, backoff: true }
   );
