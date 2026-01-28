@@ -5,13 +5,10 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
-import type { FlowSession, FlowMetadata } from "../types.js";
+import type { FlowSession, FlowMetadata, StorageBackend } from "../types.js";
 import type { SkillFlowConfig } from "../config.js";
 import { getPluginConfig } from "../config.js";
-import {
-  loadStorageBackend,
-  resolveFlowPath,
-} from "../engine/hooks-loader.js";
+import { resolvePathSafely, validatePathWithinBase } from "../security/path-validation.js";
 
 /**
  * Get the flows directory path (same logic as flow-store.ts)
@@ -24,6 +21,43 @@ function getFlowsDir(api: ClawdbotPluginApi): string {
   }
   const stateDir = api.runtime.state.resolveStateDir();
   return path.join(stateDir, "flows");
+}
+
+/**
+ * Resolve relative path to absolute (relative to flow directory)
+ */
+function resolveFlowPath(
+  api: ClawdbotPluginApi,
+  flowName: string,
+  relativePath: string
+): string {
+  const flowsDir = getFlowsDir(api);
+  const flowDir = path.join(flowsDir, flowName);
+  return resolvePathSafely(flowDir, relativePath, "flow path");
+}
+
+/**
+ * Load custom storage backend module
+ */
+async function loadStorageBackend(
+  api: ClawdbotPluginApi,
+  backendPath: string
+): Promise<StorageBackend | null> {
+  try {
+    const flowsDir = getFlowsDir(api);
+    validatePathWithinBase(backendPath, flowsDir, "storage backend");
+
+    await fs.access(backendPath);
+
+    const backendModule = await import(backendPath);
+    const backend: StorageBackend = backendModule.default ?? backendModule;
+
+    api.logger.debug(`Loaded storage backend from ${backendPath}`);
+    return backend;
+  } catch (error) {
+    api.logger.warn(`Failed to load storage backend from ${backendPath}:`, error);
+    return null;
+  }
 }
 
 /**

@@ -7,6 +7,7 @@ import { executeTransition } from "../src/engine/transitions";
 import { parseSkillFlowConfig } from "../src/config";
 import type { FlowMetadata, FlowSession } from "../src/types";
 import type { ClawdbotPluginApi } from "clawdbot/plugin-sdk";
+import type { ActionRegistry } from "../src/engine/action-loader";
 
 // Mock API
 const mockApi: ClawdbotPluginApi = {
@@ -23,6 +24,13 @@ const mockApi: ClawdbotPluginApi = {
   },
   registerCommand: () => {},
 } as ClawdbotPluginApi;
+
+// Mock ActionRegistry
+const mockActionRegistry: ActionRegistry = {
+  get: () => undefined,
+  has: () => false,
+  list: () => [],
+};
 
 describe("executeTransition", () => {
   let testFlow: FlowMetadata;
@@ -66,7 +74,8 @@ describe("executeTransition", () => {
       testFlow,
       testSession,
       "step1",
-      "continue"
+      "continue",
+      mockActionRegistry
     );
 
     expect(result.complete).toBe(false);
@@ -80,7 +89,8 @@ describe("executeTransition", () => {
       testFlow,
       testSession,
       "step2",
-      "done"
+      "done",
+      mockActionRegistry
     );
 
     expect(result.complete).toBe(true);
@@ -95,7 +105,8 @@ describe("executeTransition", () => {
       testFlow,
       testSession,
       "step1",
-      "test value"
+      "test value",
+      mockActionRegistry
     );
 
     expect(result.variables.user_input).toBe("test value");
@@ -110,7 +121,8 @@ describe("executeTransition", () => {
       testFlow,
       testSession,
       "step1",
-      "abc"
+      "abc",
+      mockActionRegistry
     );
 
     expect(result.error).toBeTruthy();
@@ -126,7 +138,8 @@ describe("executeTransition", () => {
       testFlow,
       testSession,
       "step1",
-      "42"
+      "42",
+      mockActionRegistry
     );
 
     expect(result.error).toBeUndefined();
@@ -152,7 +165,8 @@ describe("executeTransition", () => {
       testFlow,
       testSession,
       "step1",
-      "continue"
+      "continue",
+      mockActionRegistry
     );
 
     expect(result.nextStepId).toBe("high-score");
@@ -177,7 +191,8 @@ describe("executeTransition", () => {
       testFlow,
       testSession,
       "step1",
-      "continue"
+      "continue",
+      mockActionRegistry
     );
 
     expect(result.nextStepId).toBe("confirmed");
@@ -205,7 +220,8 @@ describe("executeTransition", () => {
       testFlow,
       testSession,
       "step1",
-      "yes"
+      "yes",
+      mockActionRegistry
     );
 
     expect(result.nextStepId).toBe("confirm");
@@ -217,7 +233,8 @@ describe("executeTransition", () => {
       testFlow,
       testSession,
       "nonexistent",
-      "test"
+      "test",
+      mockActionRegistry
     );
 
     expect(result.error).toBeTruthy();

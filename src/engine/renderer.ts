@@ -8,7 +8,6 @@ import type {
   FlowStep,
   FlowSession,
   ReplyPayload,
-  LoadedHooks,
 } from "../types.js";
 import { normalizeButton } from "../validation.js";
 
@@ -107,18 +106,14 @@ function renderFallback(
 /**
  * Render a flow step for the user's channel
  *
- * Note: Step actions (fetch, beforeRender) are now executed in executor.ts
- * before this function is called. The api and hooks parameters are retained for:
- * - API consistency with other engine functions
- * - Future extensibility (e.g., channel-specific rendering hooks)
- * - Backwards compatibility if deprecated hooks are re-enabled
+ * Note: Step actions (fetch, beforeRender) are executed in executor.ts
+ * before this function is called.
  *
  * @param _api - Plugin API (reserved for future use)
  * @param flow - Flow metadata
  * @param step - Step to render (already modified by beforeRender actions)
  * @param session - Current session with variables (already populated by fetch actions)
  * @param channel - Target channel (telegram, slack, etc.)
- * @param _hooks - Loaded hooks (reserved for future use)
  * @returns Rendered message payload for the channel
  */
 export async function renderStep(
@@ -126,8 +121,7 @@ export async function renderStep(
   flow: FlowMetadata,
   step: FlowStep,
   session: FlowSession,
-  channel: string,
-  _hooks?: LoadedHooks | null
+  channel: string
 ): Promise<ReplyPayload> {
   // Channel-specific rendering
   if (channel === "telegram") {

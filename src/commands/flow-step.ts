@@ -13,11 +13,6 @@ import {
 } from "../state/session-store.js";
 import { saveFlowHistory } from "../state/history-store.js";
 import { processStep } from "../engine/executor.js";
-import {
-  loadHooks,
-  resolveFlowPath,
-  safeExecuteHook,
-} from "../engine/hooks-loader.js";
 
 export function createFlowStepCommand(api: ClawdbotPluginApi) {
   return async (args: {
@@ -68,29 +63,6 @@ export function createFlowStepCommand(api: ClawdbotPluginApi) {
     const session = getSession(sessionKey);
 
     if (!session) {
-      // Load hooks and call onFlowAbandoned
-      if (flow.hooks) {
-        const hooksPath = resolveFlowPath(api, flow.name, flow.hooks);
-        const hooks = await loadHooks(api, hooksPath);
-        if (hooks?.lifecycle?.onFlowAbandoned) {
-          await safeExecuteHook(
-            api,
-            "onFlowAbandoned",
-            hooks.lifecycle.onFlowAbandoned,
-            {
-              flowName,
-              currentStepId: stepId,
-              senderId: args.senderId,
-              channel: args.channel,
-              variables: {},
-              startedAt: 0,
-              lastActivityAt: 0,
-            },
-            "timeout"
-          );
-        }
-      }
-
       return {
         text: `Session expired or not found.\n\nUse /flow_start ${flowName} to restart the flow.`,
       };

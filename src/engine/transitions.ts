@@ -8,18 +8,11 @@ import type {
   FlowStep,
   FlowSession,
   TransitionResult,
-  LoadedHooks,
-  AfterCaptureAction,
-  EnhancedPluginApi,
   DeclarativeAction,
-  ConditionalAction,
 } from "../types.js";
 import { normalizeButton, validateInput } from "../validation.js";
-import { safeExecuteAction } from "./hooks-loader.js";
 import { sanitizeInput } from "../security/input-sanitization.js";
 import { getPluginConfig } from "../config.js";
-import { shouldExecuteAction } from "./executor.js";
-import * as pluginHooks from "../hooks/index.js";
 import type { ActionRegistry } from "./action-loader.js";
 import { evaluateCondition as evaluateDeclarativeCondition } from "./condition-evaluator.js";
 import { executeDeclarativeAction } from "./action-executor.js";
@@ -106,15 +99,8 @@ export async function executeTransition(
   session: FlowSession,
   stepId: string,
   value: string | number,
-  hooks?: LoadedHooks | null,
-  actionRegistry?: ActionRegistry | null
+  actionRegistry: ActionRegistry
 ): Promise<TransitionResult> {
-  // Create enhanced API with plugin utilities
-  const enhancedApi: EnhancedPluginApi = {
-    ...api,
-    hooks: pluginHooks,
-  };
-
   // Find current step
   const step = flow.steps.find((s) => s.id === stepId);
 
@@ -171,82 +157,38 @@ export async function executeTransition(
     // Execute afterCapture actions
     if (step.actions?.afterCapture) {
       const updatedSession = { ...session, variables: updatedVariables };
+      const context = createInterpolationContext(updatedSession, flow.env || {});
 
-      // Check if actions are declarative (new) or legacy hooks
-      const firstAction = step.actions.afterCapture[0];
-      const isDeclarative = firstAction && "type" in firstAction;
+      for (const action of step.actions.afterCapture) {
+        const declarativeAction = action as DeclarativeAction;
 
-      if (isDeclarative && actionRegistry) {
-        // NEW: Declarative action system
-        const context = createInterpolationContext(updatedSession, flow.env || {});
-
-        for (const action of step.actions.afterCapture) {
-          const declarativeAction = action as DeclarativeAction;
-
-          // Evaluate condition
-          if (declarativeAction.if && !evaluateDeclarativeCondition(declarativeAction.if, updatedSession)) {
-            api.logger.debug(`Skipping afterCapture action ${declarativeAction.type} - condition not met`);
-            continue;
-          }
-
-          // Interpolate config
-          const config = interpolateConfig(declarativeAction.config, context);
-
-          try {
-            // Execute action
-            await executeDeclarativeAction(
-              declarativeAction.type,
-              config,
-              {
-                session: updatedSession,
-                api,
-                step,
-                capturedVariable: step.capture,
-                capturedValue: capturedValue,
-              },
-              actionRegistry
-            );
-          } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : String(error);
-            api.logger.error(`AfterCapture action ${declarativeAction.type} failed: ${errorMsg}`);
-            // Continue with other actions
-          }
+        // Evaluate condition
+        if (declarativeAction.if && !evaluateDeclarativeCondition(declarativeAction.if, updatedSession)) {
+          api.logger.debug(`Skipping afterCapture action ${declarativeAction.type} - condition not met`);
+          continue;
         }
-      } else if (hooks) {
-        // LEGACY: Hook-based action system
-        for (const action of step.actions.afterCapture) {
-          // Check if it's a legacy action (has "action" field instead of "type")
-          if (!("action" in action)) continue;
 
-          const legacyAction = action as unknown as ConditionalAction;
-          const { execute, actionName } = shouldExecuteAction(legacyAction, updatedSession);
+        // Interpolate config
+        const config = interpolateConfig(declarativeAction.config, context);
 
-          if (!execute) {
-            api.logger.debug(
-              `Skipping afterCapture action "${actionName}" - condition not met`
-            );
-            continue;
-          }
-
-          const afterCaptureFn = hooks.actions[actionName] as AfterCaptureAction | undefined;
-          if (afterCaptureFn) {
-            if (afterCaptureFn.length > 4) {
-              api.logger.error(
-                `AfterCapture action "${actionName}" has invalid signature. Expected 3-4 parameters (variable, value, session, api?), got ${afterCaptureFn.length}`
-              );
-              continue;
-            }
-
-            await safeExecuteAction(
+        try {
+          // Execute action
+          await executeDeclarativeAction(
+            declarativeAction.type,
+            config,
+            {
+              session: updatedSession,
               api,
-              actionName,
-              afterCaptureFn,
-              step.capture,
-              capturedValue,
-              updatedSession,
-              enhancedApi
-            );
-          }
+              step,
+              capturedVariable: step.capture,
+              capturedValue: capturedValue,
+            },
+            actionRegistry
+          );
+        } catch (error) {
+          const errorMsg = error instanceof Error ? error.message : String(error);
+          api.logger.error(`AfterCapture action ${declarativeAction.type} failed: ${errorMsg}`);
+          // Continue with other actions
         }
       }
     }
