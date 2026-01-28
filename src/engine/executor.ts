@@ -16,6 +16,7 @@ import { loadActionRegistry, type ActionRegistry } from "./action-loader.js";
 import { evaluateCondition } from "./condition-evaluator.js";
 import { executeDeclarativeAction } from "./action-executor.js";
 import { createInterpolationContext, interpolateConfig } from "./interpolation.js";
+import { updateSession, getSessionKey } from "../state/session-store.js";
 
 /**
  * Execute step-level actions (fetch, beforeRender)
@@ -206,6 +207,11 @@ export async function startFlow(
   const actionResult = await executeStepActions(api, firstStep, session, flow, actionRegistry);
   firstStep = actionResult.step;
   session = actionResult.session;
+
+  // Save the modified session (with variables from fetch actions) to the store
+  const sessionKey = getSessionKey(session.senderId, session.flowName);
+  updateSession(sessionKey, { variables: session.variables });
+  api.logger.debug(`[SESSION] Saved session after fetch actions. Variables: ${Object.keys(session.variables).join(', ')}`);
 
   return renderStep(api, flow, firstStep, session, session.channel);
 }
