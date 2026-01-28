@@ -30,7 +30,7 @@ import { createInterpolationContext, interpolateConfig } from "./interpolation.j
  */
 function evaluateCondition(
   condition: FlowStep["condition"],
-  variables: Record<string, string | number>
+  variables: Record<string, string | number | boolean>
 ): boolean {
   if (!condition) {
     return false;
@@ -75,7 +75,7 @@ function evaluateCondition(
 function findNextStep(
   step: FlowStep,
   value: string | number,
-  variables: Record<string, string | number>
+  variables: Record<string, string | number | boolean>
 ): string | undefined {
   // 1. Check button-specific next
   if (step.buttons && step.buttons.length > 0) {

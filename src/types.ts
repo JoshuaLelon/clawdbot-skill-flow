@@ -106,14 +106,14 @@ export interface FlowSession {
   currentStepId: string;
   senderId: string;
   channel: string;
-  variables: Record<string, string | number>;
+  variables: Record<string, string | number | boolean>;
   startedAt: number;
   lastActivityAt: number;
 }
 
 export interface TransitionResult {
   nextStepId?: string;
-  variables: Record<string, string | number>;
+  variables: Record<string, string | number | boolean>;
   complete: boolean;
   error?: string;
   message?: string;

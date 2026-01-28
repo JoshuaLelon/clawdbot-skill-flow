@@ -96,14 +96,30 @@ async function executeStepActions(
           );
 
           // Inject result into session
-          if (result && typeof result === "object" && varName in result) {
-            const value = (result as Record<string, unknown>)[varName];
-            if (typeof value === "string" || typeof value === "number") {
+          if (result !== null && result !== undefined) {
+            if (typeof result === "object") {
+              // If result is an object, inject all its fields as separate variables
+              const resultObj = result as Record<string, unknown>;
+              for (const [key, value] of Object.entries(resultObj)) {
+                if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+                  modifiedSession = {
+                    ...modifiedSession,
+                    variables: {
+                      ...modifiedSession.variables,
+                      [key]: value,
+                    },
+                  };
+                }
+              }
+              // Update context for next actions
+              context.variables = modifiedSession.variables;
+            } else if (typeof result === "string" || typeof result === "number" || typeof result === "boolean") {
+              // If result is a primitive, inject it under varName
               modifiedSession = {
                 ...modifiedSession,
                 variables: {
                   ...modifiedSession.variables,
-                  [varName]: value,
+                  [varName]: result,
                 },
               };
               // Update context for next actions
@@ -192,18 +208,29 @@ async function executeStepActions(
             modifiedSession,
             enhancedApi
           );
-          if (result && typeof result === "object") {
-            if (varName in result) {
-              const value = result[varName];
-              if (typeof value === "string" || typeof value === "number") {
-                modifiedSession = {
-                  ...modifiedSession,
-                  variables: {
-                    ...modifiedSession.variables,
-                    [varName]: value,
-                  },
-                };
+          if (result !== null && result !== undefined) {
+            if (typeof result === "object") {
+              // If result is an object, inject all its fields as separate variables
+              for (const [key, value] of Object.entries(result)) {
+                if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+                  modifiedSession = {
+                    ...modifiedSession,
+                    variables: {
+                      ...modifiedSession.variables,
+                      [key]: value,
+                    },
+                  };
+                }
               }
+            } else if (typeof result === "string" || typeof result === "number" || typeof result === "boolean") {
+              // If result is a primitive, inject it under varName
+              modifiedSession = {
+                ...modifiedSession,
+                variables: {
+                  ...modifiedSession.variables,
+                  [varName]: result,
+                },
+              };
             }
           }
         }
@@ -339,7 +366,7 @@ export async function processStep(
 ): Promise<{
   reply: ReplyPayload;
   complete: boolean;
-  updatedVariables: Record<string, string | number>;
+  updatedVariables: Record<string, string | number | boolean>;
 }> {
   // Load action registry for declarative actions
   let actionRegistry: ActionRegistry | null = null;
@@ -446,7 +473,7 @@ export async function processStep(
  */
 function generateCompletionMessage(
   flow: FlowMetadata,
-  variables: Record<string, string | number>
+  variables: Record<string, string | number | boolean>
 ): string {
   let message = `✅ Flow "${flow.name}" completed!\n\n`;
 

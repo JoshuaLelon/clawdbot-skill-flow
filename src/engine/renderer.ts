@@ -17,7 +17,7 @@ import { normalizeButton } from "../validation.js";
  */
 function interpolateVariables(
   text: string,
-  variables: Record<string, string | number>
+  variables: Record<string, string | number | boolean>
 ): string {
   return text.replace(/\{\{(\w+)\}\}/g, (match, varName) => {
     const value = variables[varName];
@@ -31,7 +31,7 @@ function interpolateVariables(
 function renderTelegram(
   flowName: string,
   step: FlowStep,
-  variables: Record<string, string | number>
+  variables: Record<string, string | number | boolean>
 ): ReplyPayload {
   const message = interpolateVariables(step.message, variables);
 
@@ -83,7 +83,7 @@ function renderTelegram(
  */
 function renderFallback(
   step: FlowStep,
-  variables: Record<string, string | number>
+  variables: Record<string, string | number | boolean>
 ): ReplyPayload {
   const message = interpolateVariables(step.message, variables);
 
