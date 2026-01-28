@@ -309,12 +309,26 @@ Create a new Google Spreadsheet:
 - `useGogOAuth` (boolean, default: true): Use gog CLI OAuth instead of service account
   - **Important:** Set to `true` to avoid service account quota issues
   - Requires `gog` CLI tool to be installed and authenticated
-  - Requires `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` environment variables
+  - Requires environment variables:
+    - `GOG_ACCOUNT`: Your Google account email (e.g., `user@example.com`)
+    - `GOOGLE_CLIENT_ID`: OAuth client ID
+    - `GOOGLE_CLIENT_SECRET`: OAuth client secret
   - Uses your personal OAuth credentials instead of service account
 
 **Returns:** `{ spreadsheetId, spreadsheetUrl }`
 
 **Note:** Service accounts have zero Drive storage quota, so spreadsheet creation fails by default. Use `useGogOAuth: true` (the default) to use your personal Google account's quota via the gog CLI tool.
+
+**Environment Setup:**
+```bash
+# Required for gog OAuth
+export GOG_ACCOUNT="your-email@example.com"
+export GOOGLE_CLIENT_ID="your-client-id"
+export GOOGLE_CLIENT_SECRET="your-client-secret"
+
+# Authenticate with gog
+gog auth login
+```
 
 ### Button Generation
 

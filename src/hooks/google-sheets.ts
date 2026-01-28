@@ -293,14 +293,20 @@ export async function querySheetHistory(
  * Uses the gog tool's stored refresh token to get a fresh access token
  */
 async function getGogAccessToken(): Promise<string> {
+  const { mkdtemp, rm, readFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+
+  let tmpDir: string | undefined;
+
   try {
     // Check if gog is installed
     await execAsync('which gog');
 
-    // Export refresh token from gog
-    const { stdout: refreshToken } = await execAsync('gog auth tokens export --refresh');
-    if (!refreshToken || !refreshToken.trim()) {
-      throw new Error('No refresh token available from gog');
+    // Get gog account email from environment
+    const gogAccount = process.env.GOG_ACCOUNT;
+    if (!gogAccount) {
+      throw new Error('GOG_ACCOUNT environment variable must be set (e.g., your-email@example.com)');
     }
 
     // Get OAuth credentials from environment
@@ -313,6 +319,23 @@ async function getGogAccessToken(): Promise<string> {
       );
     }
 
+    // Create temp directory for token export
+    tmpDir = await mkdtemp(join(tmpdir(), 'gog-tokens-'));
+    const tokenFile = join(tmpDir, 'tokens.json');
+
+    // Export tokens from gog using proper syntax
+    await execAsync(`gog auth tokens export "${gogAccount}" --out "${tokenFile}"`);
+
+    // Read and parse the exported tokens
+    const tokenData = JSON.parse(await readFile(tokenFile, 'utf8')) as {
+      refresh_token?: string;
+      access_token?: string;
+    };
+
+    if (!tokenData.refresh_token) {
+      throw new Error('No refresh token found in gog export');
+    }
+
     // Exchange refresh token for access token
     const tokenUrl = 'https://oauth2.googleapis.com/token';
     const response = await fetch(tokenUrl, {
@@ -321,13 +344,14 @@ async function getGogAccessToken(): Promise<string> {
       body: JSON.stringify({
         client_id: clientId,
         client_secret: clientSecret,
-        refresh_token: refreshToken.trim(),
+        refresh_token: tokenData.refresh_token,
         grant_type: 'refresh_token',
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`OAuth token exchange failed: ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`OAuth token exchange failed: ${response.statusText} - ${errorText}`);
     }
 
     const data = await response.json() as { access_token: string };
@@ -335,8 +359,17 @@ async function getGogAccessToken(): Promise<string> {
   } catch (error) {
     throw new Error(
       `Failed to get OAuth access token from gog: ${error instanceof Error ? error.message : String(error)}. ` +
-      `Ensure gog CLI is installed and authenticated.`
+      `Ensure gog CLI is installed, authenticated, and GOG_ACCOUNT env var is set.`
     );
+  } finally {
+    // Clean up temp directory
+    if (tmpDir) {
+      try {
+        await rm(tmpDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
   }
 }
 
